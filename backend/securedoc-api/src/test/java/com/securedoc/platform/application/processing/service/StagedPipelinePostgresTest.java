@@ -433,8 +433,15 @@ class StagedPipelinePostgresTest {
         service.plan(trigger(pkg));
         runAll(PipelineStage.TEXT);
         runAll(PipelineStage.FIND);
-        assertEquals(PackageStatus.PENDING_REVIEW, status(pkg), "as today: a finding for a person");
-        assertEquals(0, count(pkg, PipelineStage.REDACT), "nothing is redacted before the review");
+        // Task 0119 (owner: one review stop per case): before the case stops for a person, each document has its
+        // REDACT run: the one with a finding for a person gets the checks on a trial file, the other is redacted.
+        assertEquals(PackageStatus.PROCESSING, status(pkg), "not yet: the checks run first");
+        assertEquals(2, count(pkg, PipelineStage.REDACT), "each document's checks before the review");
+        runAll(PipelineStage.REDACT);
+        assertEquals(PackageStatus.PENDING_REVIEW, status(pkg), "a finding for a person");
+        assertEquals(1, documents.findByPackageIdAndTenantId(pkg.id(), pkg.tenantId()).stream()
+                .filter(d -> d.status() == DocumentStatus.PROCESSED).count(), "the other document is finished");
+        verify(exports, times(0)).queueCaseExport(any(), any(), org.mockito.ArgumentMatchers.anyInt(), any());
 
         Finding reviewed = findings.findByDocumentIdAndTenantId(forReview.get(0).documentId(), pkg.tenantId()).get(0);
         reviewed.confirm(ActorId.generate(), "reviewed");
@@ -469,6 +476,56 @@ class StagedPipelinePostgresTest {
 
     private final java.util.Set<com.securedoc.platform.domain.identity.DocumentId> keepsNothing =
             java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+    /** Task 0119: found from CI (intermittent since 0112). */
+    @Test
+    void twoDocumentsOfACaseFinishingAtOnceNeverStopTheCase() throws Exception {
+        // The CI fault seen since 0112: the gate read a document still waiting, the other server then saved it (its job
+        // and its result together), the gate read its job as finished and stopped a good case (LV-PRC-011). Here the
+        // other server's step is saved exactly at the gate's read of the case's jobs.
+        DocumentPackage pkg = submittedCase(2);
+        service.plan(trigger(pkg));
+        runAll(PipelineStage.TEXT);
+        runAll(PipelineStage.FIND);
+        PipelineJob first = service.claimNext(PipelineStage.REDACT, "server-a/redact-1").orElseThrow();
+        PipelineJob second = service.claimNext(PipelineStage.REDACT, "server-b/redact-1").orElseThrow();
+        StagedProcessingService serverB = service;
+        JdbcPipelineJobRepository real = jobs;
+        JdbcPipelineJobRepository watched = org.mockito.Mockito.spy(real);
+        java.util.concurrent.atomic.AtomicBoolean armed = new java.util.concurrent.atomic.AtomicBoolean(true);
+        java.util.concurrent.ExecutorService other = java.util.concurrent.Executors.newSingleThreadExecutor();
+        List<java.util.concurrent.Future<StagedProcessingService.Outcome>> otherRun = new ArrayList<>();
+        org.mockito.Mockito.doAnswer(call -> {
+            boolean fromTheGate = java.util.Arrays.stream(Thread.currentThread().getStackTrace())
+                    .anyMatch(frame -> frame.getMethodName().equals("decide"));
+            if (fromTheGate && armed.compareAndSet(true, false)) {
+                otherRun.add(other.submit(() -> serverB.run(second)));
+                long until = System.currentTimeMillis() + 20_000;
+                while (jobsOf(pkg).stream().noneMatch(j -> j.id().equals(second.id())
+                        && j.status() == PipelineJobStatus.DONE) && System.currentTimeMillis() < until) {
+                    Thread.sleep(20);
+                }
+            }
+            return call.callRealMethod();
+        }).when(watched).findByTenantIdAndPackageId(any(), any());
+        StagedProcessingService serverA;
+        jobs = watched;
+        try {
+            serverA = serviceWith.apply(new StagedProcessingSettings(PipelineMode.STAGED, Duration.ofSeconds(30), 3, 1,
+                    1, 1, Duration.ofMillis(200)));
+        } finally {
+            jobs = real;
+        }
+        try {
+            assertEquals(StagedProcessingService.Outcome.DONE, serverA.run(first));
+            assertEquals(StagedProcessingService.Outcome.DONE, otherRun.get(0).get(30, java.util.concurrent.TimeUnit.SECONDS));
+        } finally {
+            other.shutdownNow();
+        }
+        assertFalse(armed.get(), "the other server's step was saved during the gate");
+        assertEquals(PackageStatus.PROCESSING, status(pkg), "never stopped: Ready for export");
+        verify(exports, org.mockito.Mockito.atLeastOnce()).queueCaseExport(eq(pkg.tenantId()), eq(pkg.id()), eq(1), any()); // the queue keeps one
+    }
 
     /**
      * Task 0112: the review's own path. The person checks the page the final check held; the review moves the case to
@@ -558,6 +615,56 @@ class StagedPipelinePostgresTest {
         verify(incidents).recordNothingPlanned(eq(pkg.tenantId()), eq(pkg.id()), any());
         verify(exports, times(0)).queueCaseExport(any(), any(), org.mockito.ArgumentMatchers.anyInt(), any());
         assertEquals(Optional.empty(), service.claimNext(PipelineStage.REDACT, "server-b/redact-worker-1"));
+    }
+
+    @Test
+    void anAiServerOutageMakesTheWorkWaitAndItGoesOnByItselfWhenTheServerIsBack() throws Exception {
+        // Task 0116 (owner: outages wait, they never stop a case). The AI server stops mid-run.
+        java.util.concurrent.atomic.AtomicBoolean down = new java.util.concurrent.atomic.AtomicBoolean(true);
+        service.withAiOutage(new AiServerOutage(down::get, java.time.Clock.systemUTC(), Duration.ofMillis(1)));
+        DocumentPackage pkg = submittedCase(2);
+        java.util.concurrent.atomic.AtomicInteger aiCalls = new java.util.concurrent.atomic.AtomicInteger();
+        onFind = document -> {
+            aiCalls.incrementAndGet();
+            if (down.get()) {
+                throw new com.securedoc.platform.application.exception.TechnicalDependencyException(
+                        com.securedoc.platform.application.exception.TechnicalDependency.AI,
+                        com.securedoc.platform.application.exception.TechnicalFailureCode.AI_UNAVAILABLE, true,
+                        "The AI server can't be reached");
+            }
+        };
+        service.plan(trigger(pkg));
+        runAll(PipelineStage.TEXT);
+        PipelineJob first = service.claimNext(PipelineStage.FIND, "server-a/FIND-worker-1").orElseThrow();
+        assertEquals(StagedProcessingService.Outcome.DONE, service.run(first));
+
+        PipelineJob waiting = jobsOf(pkg).stream().filter(j -> j.id().equals(first.id())).findFirst().orElseThrow();
+        assertEquals(PipelineJobStatus.WAITING_RETRY, waiting.status(), "it waits");
+        assertEquals(AiServerOutage.WAITING_FOR_AI_SERVER, waiting.lastDetail());
+        assertEquals(first.attempts(), waiting.attempts(), "no try is used");
+        assertTrue(documents.findByPackageIdAndTenantId(pkg.id(), pkg.tenantId()).stream()
+                .noneMatch(d -> d.status() == DocumentStatus.FAILED), "nothing failed");
+        assertEquals(PackageStatus.PROCESSING, status(pkg), "never Stopped");
+        verify(incidents, never()).recordFailure(any(), any(), any(), any(), any(), any(), any(), any());
+        assertTrue(service.aiWorkPausedSince().isPresent());
+        assertEquals(1, jobs.countCasesWaiting(pkg.tenantId(), AiServerOutage.WAITING_FOR_AI_SERVER));
+        Thread.sleep(20);
+        int before = aiCalls.get();
+        assertTrue(service.claimNext(PipelineStage.FIND, "server-a/FIND-worker-1").isEmpty(),
+                "no AI job is taken for any case while the servers are down");
+        assertEquals(before, aiCalls.get());
+
+        down.set(false);
+        service.probeAiServers();
+        assertTrue(service.aiWorkPausedSince().isEmpty(), "back");
+        runAll(PipelineStage.FIND);
+        runAll(PipelineStage.REDACT);
+        assertEquals(PackageStatus.PROCESSING, status(pkg), "Ready for export: it went on by itself");
+        verify(exports, org.mockito.Mockito.atLeastOnce()).queueCaseExport(eq(pkg.tenantId()), eq(pkg.id()), eq(1),
+                any());
+        assertTrue(documents.findByPackageIdAndTenantId(pkg.id(), pkg.tenantId()).stream()
+                .allMatch(d -> d.status() == DocumentStatus.PROCESSED));
+        service.withAiOutage(AiServerOutage.never());
     }
 
     @Test

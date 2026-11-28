@@ -48,6 +48,8 @@ import com.securedoc.platform.domain.vo.MimeType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.securedoc.platform.domain.identity.PackageId;
+import com.securedoc.platform.domain.identity.TenantId;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
@@ -166,6 +168,130 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
     public DocumentRedactionService withSecondCheck(com.securedoc.platform.application.secondcheck.SecondCheck check) {
         this.secondCheck = Objects.requireNonNull(check);
         return this;
+    }
+
+    private com.securedoc.platform.application.port.out.AuditQueryPort personDecisions;
+
+    /** Task 0119: where the decisions a person made in Review are read from (the audit trail). */
+    public DocumentRedactionService withPersonDecisions(com.securedoc.platform.application.port.out.AuditQueryPort port) {
+        this.personDecisions = Objects.requireNonNull(port);
+        return this;
+    }
+
+    /**
+     * Task 0119 (owner, 2026-11-27 23:21): the pages a person has seen and finished in this case, whatever they were
+     * shown for: a finding they confirmed, dismissed or placed, a box they drew, a page they checked. Without the
+     * decisions only the boxes a person placed and the pages they checked count (fewer pages: the safe side).
+     */
+    java.util.Set<Integer> finishedByAPerson(TenantId tenantId, PackageId packageId, List<Finding> findings) {
+        java.util.Set<String> decided = personDecisions == null ? java.util.Set.of()
+                : personDecisions.findingsDecidedByAPerson(tenantId, packageId.value().toString());
+        java.util.Set<Integer> pages = new java.util.TreeSet<>();
+        for (Finding finding : findings) {
+            if (finding.status() == FindingStatus.DETECTED) continue;
+            boolean byAPerson = decided.contains(finding.id().value().toString())
+                    || (finding.placement() != null && finding.placement().placedBy() != null)
+                    || (finding.entityType() == com.securedoc.platform.domain.finding.EntityType.UNREAD_PAGE
+                            && finding.status() == FindingStatus.DISMISSED && !finding.location().hasBoundingBox());
+            if (byAPerson) pages.add(finding.location().pageNumber());
+        }
+        return pages;
+    }
+
+    /**
+     * Task 0119 (owner: one review stop per case). Before a document's case stops for a person, the final check (and the
+     * second check, where the entity has it on) runs on a trial file in which the findings still waiting for a person
+     * are covered as proposed. What they still find goes to the same review as a page to check. Nothing is kept, and
+     * the document stays REDACTING. The checks run again on the finished file after the review (only where no person
+     * looked, for the re-read). A failure here sends nothing to a person and stops nothing: the checks after the review
+     * still decide. True when pages were added for a person.
+     */
+    @Override
+    public boolean checkBeforeReview(RedactDocumentCommand command) {
+        try {
+            return pagesBeforeReview(command);
+        } catch (RuntimeException failure) {
+            if (Thread.currentThread().isInterrupted()) throw failure;
+            log.warn("DOCUMENT_CHECK_BEFORE_REVIEW_SKIPPED document={} package={} type={}", command.documentId(),
+                    command.packageId(), failure.getClass().getSimpleName());
+            return false;
+        }
+    }
+
+    private boolean pagesBeforeReview(RedactDocumentCommand command) {
+        if (finalCheck == null) return false;
+        Document document = documentRepository.findByIdAndTenantId(command.documentId(), command.tenantId())
+                .orElse(null);
+        if (document == null || document.status() != DocumentStatus.REDACTING
+                || !document.packageId().equals(command.packageId())) return false;
+        List<Finding> findings = findingRepository.findByDocumentIdAndTenantId(command.documentId(), command.tenantId());
+        List<Finding> waiting = findings.stream().filter(f -> f.status() == FindingStatus.DETECTED).toList();
+        if (waiting.isEmpty()) return false;
+        Artifact original = artifactRepository.findByDocumentIdAndTenantId(document.id(), command.tenantId()).stream()
+                .filter(a -> a.artifactType() == ArtifactType.ORIGINAL && a.isAvailable()).findFirst().orElse(null);
+        if (original == null) return false;
+        TenantRedactionPolicy policy = policyRepository == null ? null
+                : policyRepository.findByTenantId(command.tenantId()).orElse(null);
+        if (policy == null) policy = TenantRedactionPolicy.defaults(command.tenantId());
+
+        // As proposed: the confirmed findings and the waiting ones that have a place.
+        List<Finding> proposed = findings.stream().filter(f -> f.status() == FindingStatus.CONFIRMED
+                || (f.status() == FindingStatus.DETECTED && f.entityType()
+                        != com.securedoc.platform.domain.finding.EntityType.UNREAD_PAGE)).toList();
+        List<Finding> placed = proposed.stream().filter(f -> f.location().hasBoundingBox()).toList();
+        List<RedactionTarget> targets = keepLastFour(placed, buildRedactionTargets(placed),
+                readFoundValues(original, placed));
+        List<Finding> dismissed = findings.stream().filter(f -> f.status() == FindingStatus.DISMISSED).toList();
+        List<String> keptByAPerson = readFoundValues(original, dismissed.stream()
+                .filter(f -> f.location().endOffset() > f.location().startOffset()).toList())
+                .values().stream().map(FoundValue::raw).toList();
+        java.util.Set<Integer> seen = new java.util.TreeSet<>(finishedByAPerson(command.tenantId(),
+                command.packageId(), findings));
+        waiting.forEach(f -> seen.add(f.location().pageNumber()));
+
+        RedactionOutput trial;
+        InputStream pdfContent = storagePort.retrieve(original.storageReference());
+        try {
+            trial = pdfRedactionPort.redact(pdfContent, targets,
+                    new PdfRedactionPort.RedactionOptions(policy.searchableRedactedPages(), false));
+        } finally {
+            closeQuietly(pdfContent);
+        }
+        java.util.Map<Integer, com.securedoc.platform.domain.vision.VisionPageResult> readings =
+                new java.util.concurrent.ConcurrentHashMap<>();
+        List<Finding> toCheck = new ArrayList<>();
+        try (var content = trial.redactedPdfContent()) {
+            var result = finalCheck.run(command.tenantId(), command.documentId(), policy, content::openStream, targets,
+                    dismissed, keptByAPerson, seen, waiting,
+                    com.securedoc.platform.application.secondcheck.FinalPatternCheck.Moment.BEFORE_REVIEW, readings);
+            auditService.recordSuccess(command.tenantId(), SYSTEM_ACTOR, AuditAction.DOCUMENT_FINAL_CHECK, "Document",
+                    command.documentId().toString(), command.packageId(), command.correlationId(),
+                    "Before review: " + result.auditDetail());
+            toCheck.addAll(result.pagesToCheck());
+            if (policy.secondCheck() && secondCheck != null) {
+                var second = secondCheck.run(command.tenantId(), command.documentId(), policy, content::openStream,
+                        targets, dismissed, keptByAPerson, seen, readings);
+                auditService.recordSuccess(command.tenantId(), SYSTEM_ACTOR, AuditAction.DOCUMENT_SECOND_CHECK,
+                        "Document", command.documentId().toString(), command.packageId(), command.correlationId(),
+                        "Before review: " + second.auditDetail());
+                toCheck.addAll(second.pagesToCheck());
+            }
+        }
+        // A page already waiting for a person with a check of the same kind is not added twice (a job run again).
+        java.util.Set<String> held = findings.stream().filter(f -> f.status() == FindingStatus.DETECTED
+                        && f.entityType() == com.securedoc.platform.domain.finding.EntityType.UNREAD_PAGE
+                        && f.detectorSource() != null)
+                .map(f -> f.location().pageNumber() + ":" + f.detectorSource().detectorName())
+                .collect(java.util.stream.Collectors.toSet());
+        List<Finding> added = toCheck.stream()
+                .filter(f -> !held.contains(f.location().pageNumber() + ":" + f.detectorSource().detectorName()))
+                .toList();
+        if (added.isEmpty()) return false;
+        pageChecks(added);
+        findingRepository.saveAll(added);
+        log.info("DOCUMENT_CHECK_BEFORE_REVIEW_ADDED document={} package={} pagesToCheck={}", command.documentId(),
+                command.packageId(), added.size());
+        return true;
     }
 
     @Override
@@ -333,9 +459,15 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
                                             + (redactedValues.isEmpty() ? "" : ", valuesChecked=" + redactedValues.size())));
 
             // Task 0099: never kept, and so never delivered, with a locked or enabled value still readable in it.
-            if (finalCheckAsksForAPerson(command, originalArtifact, allFindings, targets, redactedContent::openStream)
+            // Task 0119: the pages a person finished in this case are not read again, and one vision reading per page
+            // serves both checks.
+            java.util.Set<Integer> donePages = finishedByAPerson(command.tenantId(), command.packageId(), allFindings);
+            java.util.Map<Integer, com.securedoc.platform.domain.vision.VisionPageResult> readings =
+                    new java.util.concurrent.ConcurrentHashMap<>();
+            if (finalCheckAsksForAPerson(command, originalArtifact, allFindings, targets, redactedContent::openStream,
+                    donePages, readings)
                     || secondCheckAsksForAPerson(command, originalArtifact, allFindings, targets,
-                            redactedContent::openStream)) {
+                            redactedContent::openStream, donePages, readings)) {
                 // Nothing is stored: the document stays REDACTING and the pages go to Review.
                 return RedactDocumentResult.of(command.documentId(), null, document.status(), 0);
             }
@@ -434,11 +566,14 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
 
     /**
      * Task 0099: the finished file is searched with the pattern rules again; a locked or enabled value still found sends
-     * its page to a person. Always, for every entity. True when there is one.
+     * its page to a person. Always, for every entity. True when there is one. Task 0119: a value still found on a page
+     * a person finished stops the document (our defect; LV-RED-002), and that page is not sent back.
      */
     private boolean finalCheckAsksForAPerson(RedactDocumentCommand command, Artifact original, List<Finding> findings,
                                              List<RedactionTarget> targets,
-                                             com.securedoc.platform.application.secondcheck.SecondCheck.Finished finished) {
+                                             com.securedoc.platform.application.secondcheck.SecondCheck.Finished finished,
+                                             java.util.Set<Integer> finishedByAPerson,
+                                             java.util.Map<Integer, com.securedoc.platform.domain.vision.VisionPageResult> readings) {
         if (finalCheck == null) return false;
         TenantRedactionPolicy policy = policyRepository == null ? null
                 : policyRepository.findByTenantId(command.tenantId()).orElse(null);
@@ -448,9 +583,16 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
                 .filter(f -> f.location().endOffset() > f.location().startOffset()).toList())
                 .values().stream().map(FoundValue::raw).toList();
         var result = finalCheck.run(command.tenantId(), command.documentId(), policy, finished, targets, dismissed,
-                keptByAPerson);
+                keptByAPerson, finishedByAPerson, List.of(),
+                com.securedoc.platform.application.secondcheck.FinalPatternCheck.Moment.BEFORE_KEEPING, readings);
         auditService.recordSuccess(command.tenantId(), SYSTEM_ACTOR, AuditAction.DOCUMENT_FINAL_CHECK, "Document",
                 command.documentId().toString(), command.packageId(), command.correlationId(), result.auditDetail());
+        if (!result.leftOnCheckedPages().isEmpty()) {
+            log.error("DOCUMENT_FINAL_CHECK_LEFT_ON_CHECKED_PAGES document={} package={} pages={}",
+                    command.documentId(), command.packageId(), result.leftOnCheckedPages().size());
+            throw redactionSafetyFailure(TechnicalFailureCode.REDACTION_VALUE_LEFT_ON_CHECKED_PAGE,
+                    "A value is still readable on a page a person finished");
+        }
         if (result.pagesToCheck().isEmpty()) return false;
         log.warn("DOCUMENT_FINAL_CHECK_HELD document={} package={} pagesToCheck={}", command.documentId(),
                 command.packageId(), result.pagesToCheck().size());
@@ -465,7 +607,9 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
      */
     private boolean secondCheckAsksForAPerson(RedactDocumentCommand command, Artifact original, List<Finding> findings,
                                               List<RedactionTarget> targets,
-                                              com.securedoc.platform.application.secondcheck.SecondCheck.Finished finished) {
+                                              com.securedoc.platform.application.secondcheck.SecondCheck.Finished finished,
+                                              java.util.Set<Integer> finishedByAPerson,
+                                              java.util.Map<Integer, com.securedoc.platform.domain.vision.VisionPageResult> readings) {
         TenantRedactionPolicy policy = policyRepository == null ? null
                 : policyRepository.findByTenantId(command.tenantId()).orElse(null);
         if (policy == null || !policy.secondCheck()) return false;
@@ -476,7 +620,7 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
                 .filter(f -> f.location().endOffset() > f.location().startOffset()).toList())
                 .values().stream().map(FoundValue::raw).toList();
         var result = secondCheck.run(command.tenantId(), command.documentId(), policy, finished, targets, dismissed,
-                keptByAPerson);
+                keptByAPerson, finishedByAPerson, readings);
         auditService.recordSuccess(command.tenantId(), SYSTEM_ACTOR, AuditAction.DOCUMENT_SECOND_CHECK, "Document",
                 command.documentId().toString(), command.packageId(), command.correlationId(), result.auditDetail());
         if (result.pagesToCheck().isEmpty()) return false;

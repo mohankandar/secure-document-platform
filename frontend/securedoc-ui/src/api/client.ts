@@ -717,6 +717,11 @@ class ApiClient {
     return this.request('/support/export-destinations/alert');
   }
 
+  /** Task 0116: whether processing waits for the AI servers, since when, and how many of the entity's cases. */
+  async getProcessingPause(): Promise<{ pausedSince: string | null; reasonCode: string | null; casesWaiting: number }> {
+    return this.request('/operations/processing-pause');
+  }
+
   async retryExportGroup(destinationId: string | null, code: string): Promise<Array<{ jobId: string; status: string | null }>> {
     return this.request('/support/export-jobs/retry-group', { method: 'POST', body: JSON.stringify({ destinationId, code }) });
   }

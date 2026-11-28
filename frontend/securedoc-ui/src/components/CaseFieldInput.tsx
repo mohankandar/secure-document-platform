@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { IdentifierDefinition } from '../types';
-import { DIGITS_PATTERN, HIDDEN_VALUE, readAddress, readValues, writeAddress, writeValues, type AddressParts } from '../studio/identity';
+import { DIGITS_PATTERN, HIDDEN_VALUE, choiceOrder, readAddress, readValues, valueName, writeAddress, writeValues, type AddressParts } from '../studio/identity';
 import { inCodeOrder, lengthAllows } from '../studio/intakeRules';
 
 interface Props {
@@ -38,7 +38,7 @@ function One({ id, definition, value, locked, invalid, describedBy, onChange, on
     return (
       <select {...common} value={value} disabled={locked} onChange={(e) => onChange(e.target.value)}>
         <option value="">Choose…</option>
-        {inCodeOrder(definition.allowedValues).map((v) => <option key={v} value={v}>{v}</option>)}
+        {choiceOrder(definition, inCodeOrder).map((v) => <option key={v} value={v}>{valueName(definition, v)}</option>)}
       </select>
     );
   }

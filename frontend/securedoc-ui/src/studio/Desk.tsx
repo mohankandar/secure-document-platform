@@ -4,12 +4,12 @@ import { Plus, Search, X } from 'lucide-react';
 import type { PackageSummary } from '../types';
 import {
   CAP, CASE_TILES, SOURCE_LABEL, STAGES, caseTitle, needsYou, openFindingsByPackage, relativeTime, stageLabel, stageOf, tileOf,
-  useCaseFields, usePackages, useReviewQueue, useSensitiveMatches, type StageKey,
+  useCaseFields, usePackages, useProcessingPause, useReviewQueue, useSensitiveMatches, type StageKey,
 } from './data';
-import { CASE_GROUPS, NAV, STAGE_NAMES, caseSearchPlaceholders, firstThatFits, priorityName, priorityRank } from './words';
+import { CASE_GROUPS, NAV, STAGE_NAMES, caseSearchPlaceholders, firstThatFits, priorityName, priorityRank, processingPauseBanner } from './words';
 import { ExportChip, Kbd, Notice, Spinner, StageChip } from './atoms';
 import { isLvCode, lvLabel } from './lvCodes';
-import { exportNextStep, exportStateOf, exportStatusLabel, isExporting } from './exportRules';
+import { clockTime, exportNextStep, exportStateOf, exportStatusLabel, isExporting } from './exportRules';
 import CaseDrawer from './CaseDrawer';
 import { BulkApproveBar, useBulkApprove, type BulkSelection } from './BulkApprove';
 import { LoadErrorCard } from './failure';
@@ -148,6 +148,8 @@ export default function Desk({ caps }: { caps: string[] }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [caseId, flat, navigate]);
 
+  // Task 0116: the banner while processing waits for the AI servers.
+  const { data: pause } = useProcessingPause(caps.includes(CAP.desk));
   const total = all.length;
   const deliveredCount = counts.byStage.get('delivered') ?? 0;
 
@@ -174,6 +176,10 @@ export default function Desk({ caps }: { caps: string[] }) {
             </Link>
           )}
         </header>
+
+        {pause?.pausedSince && (
+          <Notice tone="mark">{processingPauseBanner(clockTime(pause.pausedSince), pause.casesWaiting)}</Notice>
+        )}
 
         <LifecycleBand counts={counts.byStage} active={filter} onSelect={(f) => setFilter((cur) => (cur === f ? 'all' : f))} />
 

@@ -48,6 +48,7 @@ public class JpaTenantRedactionPolicyRepositoryAdapter implements TenantRedactio
         entity.setVisionOcrThreshold(policy.vision().ocrThreshold());
         entity.setSecondCheckEnabled(policy.secondCheck());
         entity.setDocumentContextEnabled(policy.documentContext());
+        entity.setFinalCheckRereadEnabled(policy.finalCheckReread());
         entity.setLockedItemsOn(policy.lockedItemsOn());
         entity.setUpdatedAt(policy.updatedAt());
         repository.save(entity);
@@ -67,6 +68,6 @@ public class JpaTenantRedactionPolicyRepositoryAdapter implements TenantRedactio
                 stored.packs(), stored.keepLastFour(), entity.isLockedItemsOn(),
                 new com.securedoc.platform.domain.business.VisionSettings(
                         entity.isVisionEnabled(), entity.getVisionOcrThreshold()),
-                entity.isSecondCheckEnabled(), entity.isDocumentContextEnabled());
+                entity.isSecondCheckEnabled(), entity.isDocumentContextEnabled(), entity.isFinalCheckRereadEnabled());
     }
 }

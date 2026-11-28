@@ -65,7 +65,7 @@ class DerivedDestinationDeliveryAdapterTest {
                 IntegrationPurpose.DERIVED_DOCUMENT_DELIVERY, IntegrationDirection.OUTBOUND,
                 IntegrationProviderType.HTTP_API, IntegrationAuthenticationType.API_KEY, null,
                 "https://example.test/derived", null, reference, 3, 0, 24, 10, 10_000_000L, 100,
-                IntegrationAcknowledgementMode.DESTINATION_RECEIPT, true, Instant.now());
+                IntegrationAcknowledgementMode.DESTINATION_RECEIPT, true, Instant.now()).withAllowedHosts(java.util.Set.of("example.test", "destination.example", "source.example.test")); // stubbed client: these names are not resolved
     }
 
     @Test
@@ -209,7 +209,7 @@ class DerivedDestinationDeliveryAdapterTest {
                 IntegrationPurpose.DERIVED_DOCUMENT_DELIVERY, IntegrationDirection.OUTBOUND,
                 IntegrationProviderType.HTTP_API, IntegrationAuthenticationType.NONE, null,
                 "https://destination.example/api", null, null, 3, 1, 24, 10, 10_000_000L, 100,
-                IntegrationAcknowledgementMode.DESTINATION_RECEIPT, true, Instant.now());
+                IntegrationAcknowledgementMode.DESTINATION_RECEIPT, true, Instant.now()).withAllowedHosts(java.util.Set.of("example.test", "destination.example", "source.example.test")); // stubbed client: these names are not resolved
 
         assertThrows(TechnicalDependencyException.class, () -> com.securedoc.platform.application.pipeline
                 .ExportJobAttempt.run(() -> adapter.deliver(connection, request())));
@@ -231,7 +231,7 @@ class DerivedDestinationDeliveryAdapterTest {
                 IntegrationPurpose.DERIVED_DOCUMENT_DELIVERY, IntegrationDirection.OUTBOUND,
                 IntegrationProviderType.HTTP_API, IntegrationAuthenticationType.NONE, null,
                 endpoint, null, null, 3, 0, 24, 10, 10_000_000L, 100,
-                IntegrationAcknowledgementMode.DESTINATION_RECEIPT, true, Instant.now());
+                IntegrationAcknowledgementMode.DESTINATION_RECEIPT, true, Instant.now()).withAllowedHosts(java.util.Set.of("example.test", "destination.example", "source.example.test")); // stubbed client: these names are not resolved
     }
 
     private IntegrationConnection fileConnection(String root) {

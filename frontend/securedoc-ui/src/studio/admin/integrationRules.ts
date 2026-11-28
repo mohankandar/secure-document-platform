@@ -282,3 +282,8 @@ export function capToCaseLimits<T extends { maxDocumentsPerIntake?: number; maxP
 export function slashParts(address: string): string[] {
   return address.split(/(?<=[/\\])(?![/\\])/).filter(Boolean);
 }
+
+/** Task 0110 (hardening: outbound addresses limited): the allowed host names as typed, commas or spaces between them. */
+export function hostList(text: string | undefined): string[] {
+  return [...new Set((text ?? '').split(/[\s,;]+/).map((h) => h.trim().toLowerCase()).filter(Boolean))];
+}

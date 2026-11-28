@@ -27,6 +27,8 @@ public record UpdateBusinessIdentifiersRequest(List<Item> identifiers) {
             Boolean multiValue,
             String currency,
             String minValue,
-            String maxValue
+            String maxValue,
+            /* Task 0113 (U10): display names of the allowed values, by code; a value without one shows its code. */
+            java.util.Map<String, String> allowedValueNames
     ) {}
 }

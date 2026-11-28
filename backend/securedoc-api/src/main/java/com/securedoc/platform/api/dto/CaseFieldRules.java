@@ -20,14 +20,24 @@ public record CaseFieldRules(
         boolean multiValue,
         String currency,
         String minValue,
-        String maxValue
+        String maxValue,
+        /* Task 0113 (U10): display names of the allowed values, by code, in the admin's order; only named ones. */
+        java.util.Map<String, String> allowedValueNames
 ) {
     static CaseFieldRules of(FieldSpec spec) {
         return new CaseFieldRules(spec.type().name(), spec.exactLength(), spec.minLength(), spec.maxLength(),
                 spec.normalisation().letterCase().name(),
                 spec.normalisation().strip() == com.documentplatform.fields.Normalisation.Strip.SEPARATORS,
                 spec.options() == null ? List.of() : spec.options(), spec.pattern(), spec.searchMode().name(), spec.sensitive(),
-                spec.multiValue(), spec.currency(), text(spec.minValue()), text(spec.maxValue()));
+                spec.multiValue(), spec.currency(), text(spec.minValue()), text(spec.maxValue()), names(spec));
+    }
+
+    private static java.util.Map<String, String> names(FieldSpec spec) {
+        java.util.Map<String, String> names = new java.util.LinkedHashMap<>();
+        if (spec.namedOptions() != null) {
+            spec.namedOptions().forEach(o -> { if (o.name() != null) names.put(o.code(), o.name()); });
+        }
+        return names;
     }
 
     private static String text(BigDecimal value) {

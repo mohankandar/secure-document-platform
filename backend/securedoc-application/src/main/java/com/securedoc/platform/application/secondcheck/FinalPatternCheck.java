@@ -77,12 +77,16 @@ public final class FinalPatternCheck {
         return this;
     }
 
-    /** What the vision model still sees on the finished page; UNREAD when its answer can't be used or it can't be asked. */
+    /**
+     * What the vision model still sees on the finished page; UNREAD when its answer can't be used or it can't be asked.
+     * Task 0119: with {@code readings}, a page the second check's vision reading already read is not asked again.
+     */
     private Set<String> readFinishedPage(int page, String text, TenantRedactionPolicy policy, SecondCheck.Finished finished,
-                                         List<RedactionTarget> targets, List<Finding> dismissed) {
+                                         List<RedactionTarget> targets, List<Finding> dismissed,
+                                         Map<Integer, com.securedoc.platform.domain.vision.VisionPageResult> readings) {
         try {
-            return SecondCheck.readImage(images, vision, page, text, policy, finished, targets, dismissed,
-                    new LinkedHashSet<>());
+            return SecondCheck.readImage(images, SecondCheck.sharing(vision, readings), page, text, policy, finished,
+                    targets, dismissed, new LinkedHashSet<>());
         } catch (RuntimeException notAsked) {
             if (Thread.currentThread().isInterrupted()) throw notAsked;
             // The model could not be asked: the page is not delivered on the text search alone.
@@ -91,23 +95,47 @@ public final class FinalPatternCheck {
     }
 
     /** The pages that were pictures in the original: routed to vision, or read by OCR for routing. */
-    private Set<Integer> picturePages(TenantId tenantId, DocumentId documentId, TenantRedactionPolicy policy) {
-        if (vision == null || !policy.vision().enabled()) return Set.of();
+    private Set<Integer> picturePages(TenantId tenantId, DocumentId documentId) {
+        if (routes == null) return Set.of();
         return routes.findByDocument(tenantId, documentId).stream()
                 .filter(r -> r.vision() || r.ocrConfidence() != null)
                 .map(com.securedoc.platform.domain.vision.PageRoute::page)
                 .collect(Collectors.toCollection(java.util.TreeSet::new));
     }
 
-    /** @param pagesToCheck one per page, unlocated, with its kinds; never a value */
-    public record Result(int pagesChecked, int pagesSkipped, List<Finding> pagesToCheck) {
+    /**
+     * Task 0119: when the check runs. {@code BEFORE_REVIEW}: before a case's first stop for a person, on a trial file in
+     * which the findings still waiting for a person are covered as proposed, so that every item for a page is shown in
+     * one review. {@code BEFORE_KEEPING}: on the finished file, before it is kept.
+     */
+    public enum Moment { BEFORE_REVIEW, BEFORE_KEEPING }
+
+    /**
+     * @param pagesToCheck       one per page, unlocated, with its kinds; never a value
+     * @param leftOnCheckedPages task 0119: pages a person finished on which a value is still found; our defect
+     * @param pagesReread        task 0119: pages read again with OCR (and the vision model where it reads them)
+     */
+    public record Result(int pagesChecked, int pagesSkipped, List<Finding> pagesToCheck,
+                         Set<Integer> leftOnCheckedPages, int pagesReread) {
+        public Result(int pagesChecked, int pagesSkipped, List<Finding> pagesToCheck) {
+            this(pagesChecked, pagesSkipped, pagesToCheck, Set.of(), 0);
+        }
+
+        public Result {
+            pagesToCheck = List.copyOf(pagesToCheck);
+            leftOnCheckedPages = Set.copyOf(leftOnCheckedPages);
+        }
+
         public String auditDetail() {
             return "Final check: pages=" + pagesChecked + ", checkedByAPersonBefore=" + pagesSkipped
                     + ", pagesToCheck=" + pagesToCheck.size()
                     + (pagesToCheck.isEmpty() ? "" : ", found=[" + pagesToCheck.stream().limit(MAX_PAGES_NAMED)
                             .map(f -> "p" + f.location().pageNumber() + ":" + f.detectorSource().version()
                                     .replace(',', '+'))
-                            .collect(Collectors.joining(" ")) + "]");
+                            .collect(Collectors.joining(" ")) + "]")
+                    + ", readAgain=" + pagesReread
+                    + (leftOnCheckedPages.isEmpty() ? "" : ", leftOnCheckedPages=[" + leftOnCheckedPages.stream()
+                            .sorted().limit(MAX_PAGES_NAMED).map(p -> "p" + p).collect(Collectors.joining(" ")) + "]");
         }
     }
 
@@ -119,35 +147,124 @@ public final class FinalPatternCheck {
     }
 
     /**
+     * As before task 0119: the pages a person checked are those of a dismissed page check; on the finished file.
+     *
      * @param dismissed    what a person decided to keep visible, and the pages a person checked
      * @param keptByPerson the text of those that have one; in memory only
      */
     public Result run(TenantId tenantId, DocumentId documentId, TenantRedactionPolicy policy,
                       SecondCheck.Finished finished, List<RedactionTarget> targets, List<Finding> dismissed,
                       List<String> keptByPerson) {
+        Set<Integer> checked = dismissed.stream()
+                .filter(f -> f.entityType() == EntityType.UNREAD_PAGE && !f.location().hasBoundingBox())
+                .map(f -> f.location().pageNumber()).collect(Collectors.toSet());
+        return run(tenantId, documentId, policy, finished, targets, dismissed, keptByPerson, checked, List.of(),
+                Moment.BEFORE_KEEPING, null);
+    }
+
+    /**
+     * Task 0119 (owner, 2026-11-28): (a) the quick search of every page's stored text, always; (b) where the entity has
+     * it on (default), OCR and the vision model read again the picture pages no person looked at in this case; (c) the
+     * pages a person finished are never read again. A value the quick search still finds on a page a person finished
+     * is our defect: the page is named in {@link Result#leftOnCheckedPages()} (the document stops), never sent back.
+     *
+     * @param seenByAPerson the pages a person finished in this case (before review: also the pages a person will see)
+     * @param waiting       before review: the findings still waiting for a person (an unlocated one is no hit again)
+     * @param readings      the vision readings of this file, shared with the second check; null: none shared
+     */
+    public Result run(TenantId tenantId, DocumentId documentId, TenantRedactionPolicy policy,
+                      SecondCheck.Finished finished, List<RedactionTarget> targets, List<Finding> dismissed,
+                      List<String> keptByPerson, Set<Integer> seenByAPerson, List<Finding> waiting, Moment moment,
+                      Map<Integer, com.securedoc.platform.domain.vision.VisionPageResult> readings) {
         long started = System.nanoTime();
-        List<TextExtractionPort.PageText> pages;
+        List<TextExtractionPort.PageText> stored;
         try (InputStream in = finished.open()) {
-            pages = extraction.extractReadable(in, "application/pdf", null).pages();
+            stored = extraction.extractTextLayer(in, "application/pdf").pages();
         } catch (IOException e) {
             throw new IllegalStateException("The finished file could not be read for the final check");
         }
-        Set<Integer> checkedByAPerson = dismissed.stream()
-                .filter(f -> f.entityType() == EntityType.UNREAD_PAGE && !f.location().hasBoundingBox())
-                .map(f -> f.location().pageNumber()).collect(Collectors.toSet());
         Set<String> kept = keptByPerson.stream().map(RedactedValues::comparable)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
 
+        // (a) Every page's stored text.
+        Map<Integer, Set<String>> hits = search(stored, policy, targets, dismissed, kept);
+
+        // (b) Picture pages no person looked at: OCR again, and the vision model where it reads them.
+        Set<Integer> pictures = picturePages(tenantId, documentId);
+        Set<Integer> reread = new java.util.TreeSet<>();
+        if (policy.finalCheckReread()) {
+            for (TextExtractionPort.PageText page : stored) {
+                boolean picture = pictures.contains(page.pageNumber()) || page.text().strip().length() < LITTLE_TEXT;
+                if (picture && !seenByAPerson.contains(page.pageNumber())) reread.add(page.pageNumber());
+            }
+        }
+        int visionPages = 0;
+        if (!reread.isEmpty()) {
+            List<TextExtractionPort.PageText> read;
+            try (InputStream in = finished.open()) {
+                read = extraction.extractReadable(in, "application/pdf", reread).pages();
+            } catch (IOException e) {
+                throw new IllegalStateException("The finished file could not be read for the final check");
+            }
+            search(read, policy, targets, dismissed, kept)
+                    .forEach((page, kinds) -> hits.computeIfAbsent(page, p -> new LinkedHashSet<>()).addAll(kinds));
+            boolean vision = this.vision != null && policy.vision().enabled();
+            for (TextExtractionPort.PageText page : read) {
+                if (!vision || !pictures.contains(page.pageNumber())) continue;
+                visionPages++;
+                Set<String> seen = readFinishedPage(page.pageNumber(), page.text(), policy, finished, targets,
+                        dismissed, readings);
+                // The model now and then gives an answer that can't be used (seen on handwritten pages); asked once more.
+                if (seen.equals(Set.of(SecondCheck.UNREAD_CODE))) {
+                    seen = readFinishedPage(page.pageNumber(), page.text(), policy, finished, targets, dismissed, null);
+                }
+                if (!seen.isEmpty()) hits.computeIfAbsent(page.pageNumber(), p -> new LinkedHashSet<>()).addAll(seen);
+            }
+        }
+
+        List<Finding> toCheck = new ArrayList<>();
+        Set<Integer> leftOnChecked = new java.util.TreeSet<>();
+        hits.forEach((page, kinds) -> {
+            // The kinds a person was shown on a page check of this page and let stand are kept, as a dismissed value.
+            dismissed.stream().filter(f -> f.location().pageNumber() == page && !f.location().hasBoundingBox())
+                    .map(f -> kindsOf(f) != null ? kindsOf(f) : SecondCheck.kindsOf(f)).filter(Objects::nonNull)
+                    .forEach(kinds::removeAll);
+            if (kinds.isEmpty()) return;
+            if (moment == Moment.BEFORE_REVIEW) {
+                // A value a waiting finding has no place for yet is shown with that finding already.
+                waiting.stream().filter(f -> f.location().pageNumber() == page && !f.location().hasBoundingBox())
+                        .map(f -> CODES.get(f.entityType())).filter(Objects::nonNull).forEach(kinds::remove);
+                if (kinds.isEmpty()) return;
+            } else if (seenByAPerson.contains(page)) {
+                leftOnChecked.add(page);
+                return;
+            }
+            toCheck.add(Finding.create(tenantId, documentId, EntityType.UNREAD_PAGE, FindingLocation.unlocated(page),
+                    Confidence.of(0.0), new DetectorSource(SOURCE, inOrder(kinds)),
+                    FindingOrigin.of(DetectionPath.PAGE_CHECK, List.of())));
+        });
+        int skipped = (int) stored.stream().filter(p -> seenByAPerson.contains(p.pageNumber())).count();
+        // Counts only.
+        log.info("FINAL_CHECK_COMPLETED document={} moment={} pages={} checkedByAPerson={} readAgain={} visionPages={} "
+                        + "pagesToCheck={} leftOnCheckedPages={} durationMs={}", documentId, moment, stored.size(),
+                skipped, reread.size(), visionPages, toCheck.size(), leftOnChecked.size(),
+                (System.nanoTime() - started) / 1_000_000L);
+        return new Result(stored.size(), skipped, toCheck, leftOnChecked, reread.size());
+    }
+
+    /** Less than this much stored text: the page is a picture in the finished file (a redacted page is one). */
+    private static final int LITTLE_TEXT = 20;
+
+    /** The pattern rules on these pages: the kinds still found per page, less what is kept on purpose. */
+    private Map<Integer, Set<String>> search(List<TextExtractionPort.PageText> pages, TenantRedactionPolicy policy,
+                                             List<RedactionTarget> targets, List<Finding> dismissed, Set<String> kept) {
         Map<Integer, TextExtractionPort.PageText> byNumber = new LinkedHashMap<>();
         List<SensitiveDataDetectionPort.PageInput> inputs = new ArrayList<>();
-        int skipped = 0;
         for (TextExtractionPort.PageText page : pages) {
-            if (checkedByAPerson.contains(page.pageNumber())) {
-                skipped++;
-                continue;
-            }
             byNumber.put(page.pageNumber(), page);
-            inputs.add(new SensitiveDataDetectionPort.PageInput(page.pageNumber(), page.text()));
+            if (!page.text().isBlank()) {
+                inputs.add(new SensitiveDataDetectionPort.PageInput(page.pageNumber(), page.text()));
+            }
         }
         Set<EntityType> searched = java.util.EnumSet.noneOf(EntityType.class);
         searched.addAll(policy.enabledEntityTypes());
@@ -169,27 +286,7 @@ public final class FinalPatternCheck {
             if (box.isPresent() && keptByAPerson(dismissed, hit.pageNumber(), type, box.get())) continue;
             hits.computeIfAbsent(hit.pageNumber(), p -> new LinkedHashSet<>()).add(CODES.get(type));
         }
-        int visionPages = 0;
-        for (int page : picturePages(tenantId, documentId, policy)) {
-            TextExtractionPort.PageText read = byNumber.get(page);
-            if (read == null) continue; // checked by a person before, or not in the file
-            visionPages++;
-            // The model now and then gives an answer that can't be used (seen on handwritten pages); asked once more.
-            Set<String> seen = readFinishedPage(page, read.text(), policy, finished, targets, dismissed);
-            if (seen.equals(Set.of(SecondCheck.UNREAD_CODE))) {
-                seen = readFinishedPage(page, read.text(), policy, finished, targets, dismissed);
-            }
-            if (!seen.isEmpty()) hits.computeIfAbsent(page, p -> new LinkedHashSet<>()).addAll(seen);
-        }
-        List<Finding> toCheck = new ArrayList<>();
-        hits.forEach((page, kinds) -> toCheck.add(Finding.create(tenantId, documentId, EntityType.UNREAD_PAGE,
-                FindingLocation.unlocated(page), Confidence.of(0.0), new DetectorSource(SOURCE, inOrder(kinds)),
-                FindingOrigin.of(DetectionPath.PAGE_CHECK, List.of()))));
-        // Counts only.
-        log.info("FINAL_CHECK_COMPLETED document={} pages={} skipped={} visionPages={} pagesToCheck={} durationMs={}",
-                documentId, byNumber.size(), skipped, visionPages, toCheck.size(),
-                (System.nanoTime() - started) / 1_000_000L);
-        return new Result(byNumber.size(), skipped, List.copyOf(toCheck));
+        return hits;
     }
 
     private static boolean keptByAPerson(List<Finding> dismissed, int page, EntityType type, BoundingBox box) {

@@ -80,7 +80,8 @@ public class BusinessAdminController {
                         item.extractable(), item.displayable(), item.validationType(), item.exactLength(),
                         item.minLength(), item.maxLength(), item.caseNormalization(), item.stripSeparators(),
                         item.allowedValues(), item.customPattern(), item.searchMode(), item.sensitive(),
-                        item.multiValue(), item.currency(), item.minValue(), item.maxValue())).toList();
+                        item.multiValue(), item.currency(), item.minValue(), item.maxValue(),
+                        item.allowedValueNames())).toList();
         service.updateIdentifiers(principal.tenantId(), principal.actorId(),
                 contextResolver.resolveCorrelationId(request), inputs);
         return ResponseEntity.ok(toResponse(principal.tenantId(), service.getConfiguration(principal.tenantId())));
@@ -132,7 +133,7 @@ public class BusinessAdminController {
                 body.enabledPacks() == null ? null : parsePacks(body.enabledPacks()),
                 body.keepLastFourKinds() == null ? null : parseTypes(body.keepLastFourKinds()),
                 body.visionEnabled(), body.visionOcrThreshold(), body.secondCheckEnabled(),
-                body.documentContextEnabled());
+                body.documentContextEnabled(), body.finalCheckRereadEnabled());
         return ResponseEntity.ok(toResponse(principal.tenantId(), service.getConfiguration(principal.tenantId())));
     }
 
@@ -229,7 +230,7 @@ public class BusinessAdminController {
                 // Task 0099: the locked items are on for every entity.
                 names(policy.packs()), names(policy.keepLastFour()), true,
                 policy.vision().enabled(), policy.vision().ocrThreshold(), policy.secondCheck(),
-                policy.documentContext());
+                policy.documentContext(), policy.finalCheckReread());
         var lifecycle = configuration.lifecyclePolicy();
         var lifecycleResponse = new BusinessAdminConfigurationResponse.LifecyclePolicyResponse(
                 lifecycle.originalRetentionHours(), lifecycle.redactedCacheHours(), lifecycle.neverExportedHoldHours(),

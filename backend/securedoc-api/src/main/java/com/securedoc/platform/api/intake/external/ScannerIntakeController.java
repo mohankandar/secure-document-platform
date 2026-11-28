@@ -37,6 +37,7 @@ public class ScannerIntakeController {
         this.tenants = tenants;
     }
 
+    @com.securedoc.platform.api.security.OpenEndpoint("machine caller, admitted by machine admission")
     @PostMapping
     public ResponseEntity<ExternalIntakeResponse> create(@RequestBody ExternalIntakeCreateRequest request,
                                                          HttpServletRequest httpRequest) {
@@ -47,6 +48,7 @@ public class ScannerIntakeController {
                 .body(ExternalIntakeResponse.from(transactions.create(input, principal, correlationId)).in(entity(principal)));
     }
 
+    @com.securedoc.platform.api.security.OpenEndpoint("machine caller, admitted by machine admission")
     @PostMapping(value = "/{packageId}/documents/{externalSourceDocumentId}", consumes = MediaType.APPLICATION_PDF_VALUE)
     public ResponseEntity<ExternalDocumentReceiptResponse> uploadDocument(
             @PathVariable UUID packageId,
@@ -67,6 +69,7 @@ public class ScannerIntakeController {
         }
     }
 
+    @com.securedoc.platform.api.security.OpenEndpoint("machine caller, admitted by machine admission")
     @GetMapping("/{packageId}")
     public ResponseEntity<ExternalIntakeResponse> status(@PathVariable UUID packageId,
                                                           HttpServletRequest httpRequest) {

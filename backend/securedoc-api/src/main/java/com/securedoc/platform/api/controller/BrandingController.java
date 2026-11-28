@@ -27,6 +27,7 @@ public class BrandingController {
         this.contextResolver = contextResolver;
     }
 
+    @com.securedoc.platform.api.security.OpenEndpoint("the entity's look, for every signed-in person")
     @GetMapping("/api/v1/branding/current")
     public ResponseEntity<EffectiveBrandingResponse> current(HttpServletRequest request) {
         var principal = contextResolver.resolvePrincipal(request);

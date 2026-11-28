@@ -52,6 +52,14 @@ public interface TextExtractionPort {
         return pageNumbers == null ? extract(content, mimeType) : extractPages(content, mimeType, pageNumbers);
     }
 
+    /**
+     * Task 0119: every page's own text (and its form fields) as stored in the file, without OCR: the final check's quick
+     * search. This default reads as {@link #extract} does (more, never less); an adapter that can skip OCR overrides it.
+     */
+    default TextExtractionOutput extractTextLayer(InputStream content, String mimeType) {
+        return extract(content, mimeType);
+    }
+
     /** Task 0064: the pages' text and their routes. */
     record RoutedOutput(TextExtractionOutput text, List<com.securedoc.platform.domain.vision.PageRoute> routes) {
         public RoutedOutput {

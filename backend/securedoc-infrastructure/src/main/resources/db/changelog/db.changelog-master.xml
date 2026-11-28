@@ -22,6 +22,7 @@
     <!-- Task 0102: data only; here, not at the end, so the change-set counts of the roll-back tests stay (see the file). -->
     <include file="db/changelog/086-refused-drop-cases.xml"/>
     <include file="db/changelog/087-finding-placement.xml"/>
+    <include file="db/changelog/088-audit-records-append-only.xml"/>
     <include file="db/changelog/014-integration-connection-foundation.xml"/>
     <include file="db/changelog/015-external-machine-intake.xml"/>
     <include file="db/changelog/016-polling-ingestion.xml"/>
@@ -50,6 +51,7 @@
     <include file="db/changelog/041-reporting-minutes-per-page.xml"/>
     <include file="db/changelog/042-sensitivity-levels.xml"/>
     <include file="db/changelog/043-pipeline-jobs.xml"/>
+    <include file="db/changelog/089-connection-allowed-hosts.xml"/>
     <include file="db/changelog/044-export-followups.xml"/>
     <include file="db/changelog/045-pipeline-job-queue-seq.xml"/>
     <include file="db/changelog/046-document-store-names.xml"/>
@@ -74,6 +76,7 @@
     <include file="db/changelog/072-intake-refusals.xml"/>
     <include file="db/changelog/085-document-context.xml"/>
     <include file="db/changelog/067-destination-profiles.xml"/>
+    <include file="db/changelog/091-final-check-reread.xml"/>
     <!-- Task 0118: last, after every table and column exists. -->
     <include file="db/changelog/090-schema-comments.xml"/>
 </databaseChangeLog>

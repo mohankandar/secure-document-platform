@@ -6,7 +6,7 @@ Meanings ending in "(to confirm)" are drafted from the code and wait for the own
 
 The links between the main tables are drawn in [RELATIONSHIPS.md](RELATIONSHIPS.md).
 
-115 tables, 1096 columns.
+115 tables, 1100 columns.
 
 ## LexaVault tables
 
@@ -921,6 +921,7 @@ Each entity's configured connections to senders (intake sources) and destination
 | `polling_local_time` | time without time zone |  |  | For DAILY polling: local time of day of the run. |
 | `polling_time_zone` | character varying(80) |  |  | Time zone of the daily polling time. |
 | `polling_batch_limit` | integer |  |  | Most packages taken in one polling run. |
+| `allowed_hosts` | character varying(2000) |  |  | Host names the IT Administrator allows this connection to reach although internal or plain http, comma-separated, empty for none. |
 | `destination_settings` | text |  |  | JSON settings added to the destination's published profile (profile, token address, client id, field mapping), no secret. |
 
 - Primary key: `id`
@@ -1770,6 +1771,7 @@ An entity's sensitive-data policy: review rules, thresholds and processing switc
 | `vision_ocr_threshold` | double precision | yes | `0.85` | Text-reading confidence below which a page is routed to the vision model, 0.50 to 0.99, default 0.85. |
 | `second_check_enabled` | boolean | yes | `false` | Whether a second AI reads the finished file before it is kept, off by default. |
 | `document_context_enabled` | boolean | yes | `false` | Whether the names search gets a short summary of the document and the case instructions, off by default. |
+| `final_check_reread_enabled` | boolean | yes | `true` | Whether the final check reads again, with OCR and the vision model, the picture pages no person looked at in the case, on by default. |
 
 - Primary key: `tenant_id`
 - Foreign keys:
@@ -1941,6 +1943,7 @@ Sensitivity level each watched folder gives the files it picks up, one row per e
 | `created_at` | timestamp with time zone | yes |  | When the field was created. |
 | `updated_at` | timestamp with time zone | yes |  | When the field was last changed. |
 | `updated_by` | text | yes |  | Who last changed the field. |
+| `option_names` | text[] |  |  | Display names of a dropdown field's values, in the order of options, empty for a value without one (platform-core 1.3.0); only the code is stored, matched and searched. |
 
 - Primary key: `definition_id`
 - Indexes:
@@ -2150,6 +2153,7 @@ Sensitivity level each watched folder gives the files it picks up, one row per e
 | `configuration_version` | bigint | yes |  | Version number of the connection's configuration, raised on each change and kept in the history. |
 | `created_at` | timestamp with time zone | yes | `now()` | When the connection was created. |
 | `updated_at` | timestamp with time zone | yes | `now()` | When the connection was last changed. |
+| `test_sign_in_version` | bigint |  |  | The version of this connection for which a test sign-in with a real token passed; replacing the active connection needs the draft's current version here (platform-core 1.2.0). |
 
 - Primary key: `connection_id`
 - Foreign keys:

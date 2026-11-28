@@ -73,6 +73,8 @@ public final class LexaVaultEvents {
     /** The agreed default: told when it has lasted 15 minutes, again every 4 hours. */
     private static final ConditionTiming LASTING = ConditionTiming.DEFAULT;
     private static final ConditionTiming EVERY_4_HOURS = new ConditionTiming(Duration.ZERO, Duration.ofHours(4));
+    /** Task 0116. */
+    static final ConditionTiming AI_OUTAGE = new ConditionTiming(Duration.ofMinutes(15), Duration.ofHours(4));
     private static final ConditionTiming AFTER_30_MINUTES =
             new ConditionTiming(Duration.ofMinutes(30), Duration.ofHours(4));
 
@@ -102,7 +104,9 @@ public final class LexaVaultEvents {
                 .threshold(FAILURES_IN_AN_HOUR, "Problems in an hour", 3, 1, 1000).build());
         c.register(technical(OVER_TARGET, "Cases over the time target").schedule(Schedule.every4Hours()).continuous(LASTING)
                 .count("cases", "Cases").build());
-        c.register(technical(AI_MODEL_DOWN, "AI model down").critical().continuous(LASTING).build());
+        // Task 0116 (owner): an AI server outage makes the work wait; IT hears of it after 15 minutes, then every 4 hours,
+        // and once when it ends (Recovered).
+        c.register(technical(AI_MODEL_DOWN, "AI model down").critical().continuous(AI_OUTAGE).build());
         c.register(technical(KEY_SERVICE_DOWN, "Key service down or refusing").critical().continuous(LASTING).build());
         c.register(technical(ERASE_LOG_STOP, "Erase log not usable, or a restore waiting for its replay").critical()
                 .continuous(LASTING).build());

@@ -100,3 +100,12 @@ test('0111 U4: typing stops at the configured length', () => {
   assert.equal(lengthAllows(max, 'ABCDEFGH', 'ABCDEFG'), true, 'a value already too long can be shortened');
   assert.equal(lengthAllows({ exactLength: null, maxLength: null, stripSeparators: false }, '', 'x'.repeat(500)), true);
 });
+
+test('0113 (U10): a dropdown value shows its name, or its code; named values keep the admin\'s order', async () => {
+  const { valueName, choiceOrder } = await import('./identity.ts');
+  const named = { allowedValues: ['002', '000', '001'], allowedValueNames: { '000': 'Club', '001': 'Walmart' } };
+  assert.equal(valueName(named, '000'), 'Club');
+  assert.equal(valueName(named, '002'), '002');
+  assert.deepEqual(choiceOrder(named, (c) => [...c].sort()), ['002', '000', '001']);
+  assert.deepEqual(choiceOrder({ allowedValues: ['002', '000'] }, (c) => [...c].sort()), ['000', '002']);
+});

@@ -129,7 +129,10 @@ securedoc:
     provider: ${SECUREDOC_AI_PROVIDER:ollama}
     # Generic provider/model settings. Legacy OLLAMA_* env names remain supported as fallback.
     base-url: ${SECUREDOC_AI_BASE_URL:${SECUREDOC_AI_OLLAMA_BASE_URL:http://localhost:11434}}
-    model: ${SECUREDOC_AI_MODEL:${SECUREDOC_AI_OLLAMA_MODEL:qwen2.5:7b}}
+    model: ${SECUREDOC_AI_MODEL:${SECUREDOC_AI_OLLAMA_MODEL:qwen3.5:9b}}
+    # Task 0110: the text model is pinned by digest and local only, as the vision model is. With the Ollama provider the
+    # start is refused when the server is not local (LV-AI-006) or its copy of the model has another digest (LV-AI-008).
+    model-digest: ${SECUREDOC_AI_MODEL_DIGEST:56671c2ab9385f9cfcb404638e32cd62d88e3501d44822208363c010179a3c90}
     api-key: ${SECUREDOC_AI_API_KEY:}
     timeout-seconds: ${SECUREDOC_AI_TIMEOUT_SECONDS:60}
     # Task 0064: the vision model that reads routed pages. Local Ollama only: a server outside this machine or its

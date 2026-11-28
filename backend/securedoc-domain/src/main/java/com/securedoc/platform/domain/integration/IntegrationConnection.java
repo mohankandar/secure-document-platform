@@ -50,7 +50,9 @@ public record IntegrationConnection(
         Instant createdAt,
         Instant updatedAt,
         /* Task 0087: the destination's profile and what the installation adds to it; null for every other connection. */
-        DestinationSettings destination) {
+        DestinationSettings destination,
+        /* Task 0110: host names the IT Administrator allows to be internal or plain http; by name only, never empty. */
+        java.util.Set<String> allowedHosts) {
 
     public static final int DEFAULT_TIMEOUT_SECONDS = 60;
     public static final int DEFAULT_RETRY_MAX_ATTEMPTS = 2;
@@ -124,7 +126,38 @@ public record IntegrationConnection(
         Objects.requireNonNull(updatedAt, "Updated time is required");
         validateCompatibility(purpose, direction, providerType, authenticationType, clientPrincipal, endpoint, fileShareRoot,
                 secretReference, acknowledgementMode, enabled);
+        allowedHosts = allowedHosts == null ? java.util.Set.of() : allowedHosts.stream()
+                .filter(java.util.Objects::nonNull).map(h -> h.trim().toLowerCase(java.util.Locale.ROOT))
+                .filter(h -> !h.isEmpty()).collect(java.util.stream.Collectors.toUnmodifiableSet());
         validateDestination(purpose, authenticationType, destination);
+    }
+
+    /** Before task 0110: no host allowed to be internal. */
+    public IntegrationConnection(IntegrationConnectionId id, TenantId tenantId, String name, String description,
+                                 IntegrationPurpose purpose, IntegrationDirection direction, IntegrationProviderType providerType,
+                                 IntegrationAuthenticationType authenticationType, String clientPrincipal, String endpoint,
+                                 String fileShareRoot, String secretReference, int timeoutSeconds, int retryMaxAttempts,
+                                 int incompleteWindowHours, int maxDocumentsPerIntake, long maxPdfSizeBytes, int maxPdfPages,
+                                 IntegrationPollingScheduleType pollingScheduleType, Integer pollingIntervalMinutes,
+                                 LocalTime pollingLocalTime, String pollingTimeZone, Integer pollingBatchLimit,
+                                 IntegrationAcknowledgementMode acknowledgementMode, boolean enabled, int configurationVersion,
+                                 IntegrationHealthStatus healthStatus, Instant lastSuccessAt, Instant lastFailureAt,
+                                 String lastFailureCategory, Instant createdAt, Instant updatedAt,
+                                 DestinationSettings destination) {
+        this(id, tenantId, name, description, purpose, direction, providerType, authenticationType, clientPrincipal, endpoint,
+                fileShareRoot, secretReference, timeoutSeconds, retryMaxAttempts, incompleteWindowHours, maxDocumentsPerIntake,
+                maxPdfSizeBytes, maxPdfPages, pollingScheduleType, pollingIntervalMinutes, pollingLocalTime, pollingTimeZone,
+                pollingBatchLimit, acknowledgementMode, enabled, configurationVersion, healthStatus, lastSuccessAt, lastFailureAt,
+                lastFailureCategory, createdAt, updatedAt, destination, java.util.Set.of());
+    }
+
+    /** Task 0110: the same connection with these allowed host names. */
+    public IntegrationConnection withAllowedHosts(java.util.Set<String> hosts) {
+        return new IntegrationConnection(id, tenantId, name, description, purpose, direction, providerType, authenticationType,
+                clientPrincipal, endpoint, fileShareRoot, secretReference, timeoutSeconds, retryMaxAttempts, incompleteWindowHours,
+                maxDocumentsPerIntake, maxPdfSizeBytes, maxPdfPages, pollingScheduleType, pollingIntervalMinutes, pollingLocalTime,
+                pollingTimeZone, pollingBatchLimit, acknowledgementMode, enabled, configurationVersion, healthStatus, lastSuccessAt,
+                lastFailureAt, lastFailureCategory, createdAt, updatedAt, destination, hosts);
     }
 
     /** Without destination settings (every connection that is not a document store's). */
@@ -151,7 +184,7 @@ public record IntegrationConnection(
                 clientPrincipal, endpoint, fileShareRoot, secretReference, timeoutSeconds, retryMaxAttempts, incompleteWindowHours,
                 maxDocumentsPerIntake, maxPdfSizeBytes, maxPdfPages, pollingScheduleType, pollingIntervalMinutes, pollingLocalTime,
                 pollingTimeZone, pollingBatchLimit, acknowledgementMode, enabled, configurationVersion, healthStatus, lastSuccessAt,
-                lastFailureAt, lastFailureCategory, createdAt, updatedAt, settings);
+                lastFailureAt, lastFailureCategory, createdAt, updatedAt, settings, allowedHosts);
     }
 
     private static void validateDestination(IntegrationPurpose purpose, IntegrationAuthenticationType authenticationType,
@@ -253,7 +286,7 @@ public record IntegrationConnection(
                 incompleteWindowHours, maxDocumentsPerIntake, maxPdfSizeBytes, maxPdfPages, pollingScheduleType, pollingIntervalMinutes,
                 pollingLocalTime, pollingTimeZone, pollingBatchLimit, acknowledgementMode, enabled, configurationVersion + 1,
                 enabled ? IntegrationHealthStatus.UNKNOWN : IntegrationHealthStatus.DISABLED,
-                lastSuccessAt, lastFailureAt, lastFailureCategory, createdAt, now, destination);
+                lastSuccessAt, lastFailureAt, lastFailureCategory, createdAt, now, destination, allowedHosts);
     }
 
     public IntegrationConnection recordOperationalSuccess(Instant now) {
@@ -261,7 +294,7 @@ public record IntegrationConnection(
                 clientPrincipal, endpoint, fileShareRoot, secretReference, timeoutSeconds, retryMaxAttempts, incompleteWindowHours,
                 maxDocumentsPerIntake, maxPdfSizeBytes, maxPdfPages, pollingScheduleType, pollingIntervalMinutes, pollingLocalTime,
                 pollingTimeZone, pollingBatchLimit, acknowledgementMode, enabled, configurationVersion,
-                enabled ? IntegrationHealthStatus.HEALTHY : IntegrationHealthStatus.DISABLED, now, lastFailureAt, null, createdAt, now, destination);
+                enabled ? IntegrationHealthStatus.HEALTHY : IntegrationHealthStatus.DISABLED, now, lastFailureAt, null, createdAt, now, destination, allowedHosts);
     }
 
     public IntegrationConnection recordOperationalFailure(String failureCategory, Instant now) {
@@ -269,7 +302,7 @@ public record IntegrationConnection(
                 clientPrincipal, endpoint, fileShareRoot, secretReference, timeoutSeconds, retryMaxAttempts, incompleteWindowHours,
                 maxDocumentsPerIntake, maxPdfSizeBytes, maxPdfPages, pollingScheduleType, pollingIntervalMinutes, pollingLocalTime,
                 pollingTimeZone, pollingBatchLimit, acknowledgementMode, enabled, configurationVersion,
-                enabled ? IntegrationHealthStatus.DEGRADED : IntegrationHealthStatus.DISABLED, lastSuccessAt, now, failureCategory, createdAt, now, destination);
+                enabled ? IntegrationHealthStatus.DEGRADED : IntegrationHealthStatus.DISABLED, lastSuccessAt, now, failureCategory, createdAt, now, destination, allowedHosts);
     }
 
     public boolean pollingSource() {

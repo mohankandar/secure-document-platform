@@ -35,6 +35,11 @@ public final class OutboundAddressGuard {
 
     public OutboundAddressGuard(Resolver resolver) { this.resolver = Objects.requireNonNull(resolver); }
 
+    /** Task 0110: the same resolver, for the address rule. */
+    public OutboundAddressRule.Resolver ruleResolver() {
+        return host -> java.util.List.of(resolver.resolve(host));
+    }
+
     public Verdict check(String endpoint) {
         String host;
         try {

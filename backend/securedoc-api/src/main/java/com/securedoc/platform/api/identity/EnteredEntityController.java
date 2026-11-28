@@ -34,6 +34,7 @@ public class EnteredEntityController {
         this.audit = audit;
     }
 
+    @com.securedoc.platform.api.security.OpenEndpoint("the signed-in person's own entity choice")
     @PostMapping
     @Transactional
     public ResponseEntity<Void> entered(HttpServletRequest request) {
