@@ -13,6 +13,8 @@ machine, so if a step here is wrong, the proof fails.
   and `VERSION`.
 - Your licence, your sign-in file and your role mapping (`SETUP.md`). A development package also holds the demo files
   (`install/demo/`); a production package refuses them.
+- The key service: HashiCorp Vault with Transit (`KEY_SERVICE.md`). Without it LexaVault does not start.
+- Your login system (OIDC), with the groups of your role mapping in its tokens.
 - For the AI: a model server on this machine or your private network (`application.yml`, `securedoc.ai.*`), pinned by digest.
 
 ## 1. The database and its two accounts
@@ -49,6 +51,8 @@ trail is added to and read, never changed), the platform tables' own rights, and
 PLATFORM_SETUP_DB_URL=jdbc:postgresql://dbhost:5432/lexavault
 PLATFORM_SETUP_DB_USER=lexavault_app
 PLATFORM_SETUP_DB_PASSWORD=...
+PLATFORM_SETUP_VAULT_ADDR=https://vault.internal:8200   # the key service; setup makes the customer's keys there
+PLATFORM_SETUP_VAULT_TOKEN=...                          # a login with policy platform-crypto-setup only (KEY_SERVICE.md)
 java -cp lexavault-setup.jar -Dloader.main=com.documentplatform.setup.SetupCommand \
   org.springframework.boot.loader.launch.PropertiesLauncher apply --licence licence.json --signin signin.json \
   --product LEXAVAULT --product-roles install/product-roles.json --config-out platform-tenant.properties
@@ -77,6 +81,8 @@ SECUREDOC_SECURITY_OIDC_AUDIENCE=...                                    # the si
 SECUREDOC_SECURITY_OIDC_PROVIDER_ID=...                                 # the sign-in file's providerId
 SECUREDOC_STORAGE_LOCAL_ROOT_PATH=/var/lib/lexavault/storage            # where LexaVault keeps its work files
 PLATFORM_ERASELOG_LOCATION=/var/lib/lexavault-erase-log                 # outside the database and its backups (ERASE_LOG.md)
+PLATFORM_CRYPTO_VAULT_ADDRESS=https://vault.internal:8200               # the key service, with LexaVault's own login
+PLATFORM_CRYPTO_VAULT_ROLEID=...  PLATFORM_CRYPTO_VAULT_SECRETIDFILE=... # AppRole, policy platform-crypto-app (KEY_SERVICE.md)
 java -jar lexavault.jar
 ```
 
@@ -108,7 +114,8 @@ Setup and the first entity are not run again.
 ## The install proof
 
 The proof runs these steps with the demo files, a throwaway login system (Keycloak from its own zip, with one person and one
-administrator) and a stand-in AI server (the runners have no GPU), and checks that no secret is in the package. Its case has
+administrator), a throwaway key service (Vault from its own zip, development mode; its root token stands in for the logins)
+and a stand-in AI server (the runners have no GPU), and checks that no secret is in the package. Its case has
 one finding the AI is not sure of, decided in review. It upgrades from the previous build: the previous package installed in
 a database of its own with a case, then steps 7.2 to 7.4 with this package. It runs on every release tag and once a month; a
 failure opens an issue labelled `install-proof`. Results and guide fixes: `docs/work/0114-report.md`.

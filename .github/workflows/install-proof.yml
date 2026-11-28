@@ -178,6 +178,10 @@ jobs:
       KC_VERSION: 26.8.2
       # GitHub's digest of the release's keycloak-26.8.2.zip.
       KC_SHA256: 321ffee62ec28fab18fe885d8cd62cc814edce72a35cd062dc81b504c1a406b3
+      VAULT_VERSION: 1.21.4
+      # HashiCorp's SHA256SUMS of vault_1.21.4_linux_amd64.zip and _windows_amd64.zip.
+      VAULT_SHA256_LINUX: 889b681990fe221b884b7932fa9c9dd0ee9811b9349554f1aa287ab63c9f3dae
+      VAULT_SHA256_WINDOWS: eaee599df806d467c14f572fdede45c7a5ae3948386343e9db0fe5ce921d4e0a
     steps:
       # Only the proof itself comes from the repository; what it installs is the package.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -213,6 +217,17 @@ jobs:
           echo "${KC_SHA256}  $zip" | sha256sum -c -
           if [ "$RUNNER_OS" = Windows ]; then 7z x -y -bd -o"$RUNNER_TEMP" "$(cygpath -w "$zip")" > /dev/null; else unzip -q "$zip" -d "$tmp"; fi
           echo "KEYCLOAK_HOME=$RUNNER_TEMP/keycloak-${KC_VERSION}" >> "$GITHUB_ENV"
+      # The throwaway key service: Vault's own zip, checked by its SHA-256.
+      - name: Vault (throwaway key service)
+        run: |
+          tmp="$RUNNER_TEMP"; if command -v cygpath >/dev/null; then tmp="$(cygpath -u "$RUNNER_TEMP")"; fi
+          if [ "$RUNNER_OS" = Windows ]; then os=windows; sum="$VAULT_SHA256_WINDOWS"; bin=vault.exe; else os=linux; sum="$VAULT_SHA256_LINUX"; bin=vault; fi
+          zip="$tmp/vault.zip"
+          curl -fsSL --retry 3 -o "$zip" "https://releases.hashicorp.com/vault/${VAULT_VERSION}/vault_${VAULT_VERSION}_${os}_amd64.zip"
+          echo "${sum}  $zip" | sha256sum -c -
+          mkdir -p "$tmp/vault"
+          unzip -q -o "$zip" -d "$tmp/vault"
+          echo "VAULT_BIN=$RUNNER_TEMP/vault/$bin" >> "$GITHUB_ENV"
       # The install guide's "What you need": Tesseract OCR.
       - name: Tesseract OCR (Linux)
         if: runner.os == 'Linux'

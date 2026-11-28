@@ -3,7 +3,8 @@
  * says, on a clean machine (GitHub's Linux and Windows runners), and checks the first-install criteria a machine can:
  *
  *   1. no secret is in the package;
- *   -  a throwaway login system (Keycloak from its own zip), with one person and one administrator;
+ *   -  a throwaway login system (Keycloak from its own zip), with one person and one administrator, and a throwaway key
+ *      service (Vault from its own zip, development mode, Transit);
  *   2. the schema step runs with an administrator account (the schema owner), and gives the everyday account its rights;
  *   3. setup with the sign-in file, the first entity by the install command, then LexaVault runs with the everyday account;
  *   4. a person signs in; one document end to end (intake, redaction with a stand-in AI server since there is no GPU, one
@@ -16,7 +17,7 @@
  *   node test-tools/install-proof/install-proof.mjs <package folder> <previous package folder>
  *
  * Needs PostgreSQL's command-line tools on the PATH and an administrator login in PGHOST, PGPORT, PGUSER and PGPASSWORD
- * (the runner's own PostgreSQL); KEYCLOAK_HOME (an unpacked Keycloak zip); Java 21 (java and jar) and Node 22. Everything
+ * (the runner's own PostgreSQL); KEYCLOAK_HOME (an unpacked Keycloak zip) and VAULT_BIN (Vault's program); Java 21 (java and jar) and Node 22. Everything
  * it makes (accounts, databases, folders, the login system's realm and people) is new and named for this run. No password
  * or token is printed or written to a file. Codes, counts and times only.
  */
@@ -39,11 +40,17 @@ if (!existsSync(join(keycloakHome, 'bin'))) {
   console.error('KEYCLOAK_HOME does not name an unpacked Keycloak (no bin folder).');
   process.exit(2);
 }
+const vaultBin = process.env.VAULT_BIN ? resolve(process.env.VAULT_BIN) : '';
+if (!existsSync(vaultBin)) {
+  console.error('VAULT_BIN does not name the Vault program.');
+  process.exit(2);
+}
 const windows = process.platform === 'win32';
 const run = join(tmpdir(), 'lexavault-install-proof', new Date().toISOString().replace(/[:.]/g, '-'));
 mkdirSync(join(run, 'logs'), { recursive: true });
 
-const [appPort, aiPort, kcPort, kcManagementPort] = [18114, 11514, 18180, 19114];
+const [appPort, aiPort, kcPort, kcManagementPort, vaultPort] = [18114, 11514, 18180, 19114, 18200];
+const vaultAddress = `http://127.0.0.1:${vaultPort}`;
 const base = `http://localhost:${appPort}`;
 const kcBase = `http://localhost:${kcPort}`;
 const [REALM, PROVIDER, AUDIENCE, WEB] = ['lv114', 'proof-kc', 'lexavault-api', 'lexavault-web'];
@@ -56,7 +63,7 @@ const [DB, COPY, UPGRADE] = ['lexavault_proof', 'lexavault_proof_copy', 'lexavau
 const OWNER = 'lexavault_owner';
 const APP = 'lexavault_app';
 const secret = () => randomUUID().replaceAll('-', '');
-const [ownerPassword, appPassword, kcAdminPassword] = [secret(), secret(), secret()];
+const [ownerPassword, appPassword, kcAdminPassword, vaultToken] = [secret(), secret(), secret(), secret()];
 // The login system's people: groups of the demo role mapping (install/demo/role-mapping-lexavault-demo.csv).
 const people = {
   person: { username: 'proof-person', password: secret(), groups: ['BusinessUsers', 'ElevatedUsers'] },
@@ -220,6 +227,27 @@ async function tokenOf(who) {
   return value;
 }
 
+/* ---------- the throwaway key service ---------- */
+let vault;
+function startVault() {
+  const log = join(run, 'logs', 'vault.log');
+  writeFileSync(log, '');
+  vault = spawn(vaultBin, ['server', '-dev', `-dev-listen-address=127.0.0.1:${vaultPort}`],
+    { env: { ...process.env, VAULT_DEV_ROOT_TOKEN_ID: vaultToken } });
+  vault.stdout.on('data', (d) => appendFileSync(log, d));
+  vault.stderr.on('data', (d) => appendFileSync(log, d));
+}
+/** Transit, the engine LexaVault's keys live in (KEY_SERVICE.md). */
+async function transit() {
+  await until('the key service', async () => {
+    if (vault.exitCode !== null) throw new Error(`the key service stopped (exit ${vault.exitCode})`);
+    try { return (await fetch(`${vaultAddress}/v1/sys/health`)).ok; } catch { return false; }
+  }, 60);
+  const res = await fetch(`${vaultAddress}/v1/sys/mounts/transit`, { method: 'POST',
+    headers: { 'X-Vault-Token': vaultToken, 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'transit' }) });
+  if (!res.ok) throw new Error(`Transit was not mounted (HTTP ${res.status})`);
+}
+
 /* ---------- the stand-in AI server (no GPU on the runners) ---------- */
 // One value the AI is sure of (redacted without a person) and one it is not (decided in review).
 const VALUES = { ssn: '412-55-7531', dob: '03/14/1962' };
@@ -264,6 +292,9 @@ function appEnv(inst) {
     SECUREDOC_AI_PROVIDER: 'ollama', SECUREDOC_AI_OLLAMA_BASE_URL: `http://localhost:${aiPort}`,
     SECUREDOC_AI_VISION_BASE_URL: `http://localhost:${aiPort}`, SECUREDOC_AI_MODEL: MODEL,
     SECUREDOC_AI_MODEL_DIGEST: DIGEST, SECUREDOC_AI_VISION_MODEL_DIGEST: DIGEST, SECUREDOC_AI_OLLAMA_PRELOAD_ENABLED: 'false',
+    // The key service (KEY_SERVICE.md). A customer gives LexaVault an AppRole login with platform-crypto-app only; the
+    // throwaway development server has its root token.
+    PLATFORM_CRYPTO_VAULT_ADDRESS: vaultAddress, PLATFORM_CRYPTO_VAULT_LOGIN: 'TOKEN', PLATFORM_CRYPTO_VAULT_TOKEN: vaultToken,
     SECUREDOC_STORAGE_LOCAL_ROOT_PATH: join(inst.root, 'storage'), PLATFORM_ERASELOG_LOCATION: join(inst.root, 'erase-log'),
     SECUREDOC_DELIVERY_TYPE: 'local', SECUREDOC_DELIVERY_LOCAL_OUTPUT_PATH: join(inst.root, 'export'),
     SECUREDOC_PRODUCT_TELEMETRY_OUTPUT_PATH: join(inst.root, 'logs', 'telemetry.jsonl'),
@@ -291,9 +322,10 @@ function setupAndFirstEntity(inst) {
     '--issuer', issuer, '--provider-id', PROVIDER, '--audience', AUDIENCE, '--browser-client-id', WEB], {});
   javaMain(inst.setupJar, 'com.documentplatform.setup.SetupCommand', ['apply', '--licence', join(inst.demo, 'licence-demo.json'),
     '--signin', join(signin, 'signin-local-oidc.json'), '--product', 'LEXAVAULT',
-    '--product-roles', join(inst.demo, 'product-roles-development.json'), '--no-customer-keys',
+    '--product-roles', join(inst.pkg, 'install', 'product-roles.json'),
     '--config-out', join(inst.root, 'work', 'platform-tenant.properties'), '--run-log', join(inst.root, 'logs', 'setup-runs.log')],
-  { PLATFORM_SETUP_DB_URL: dbUrl(inst.db), PLATFORM_SETUP_DB_USER: APP, PLATFORM_SETUP_DB_PASSWORD: appPassword });
+  { PLATFORM_SETUP_DB_URL: dbUrl(inst.db), PLATFORM_SETUP_DB_USER: APP, PLATFORM_SETUP_DB_PASSWORD: appPassword,
+    PLATFORM_SETUP_VAULT_ADDR: vaultAddress, PLATFORM_SETUP_VAULT_TOKEN: vaultToken });
   const said = must('java', ['-jar', inst.jar, '--activate-first-entity', `--entity-slot=${SLOT}`, `--entity-name=${ENTITY_NAME}`,
     '--server.port=0', '--server.address=127.0.0.1', '--spring.main.banner-mode=off'], { ...appEnv(inst), SERVER_PORT: '0' },
   { quiet: true, cwd: join(inst.root, 'work') });
@@ -418,14 +450,16 @@ let first;
 let field;
 try {
   startKeycloak(); // it takes a while to start; step 1 runs meanwhile
+  startVault();
   // The AI server is up before anything starts LexaVault (the first-entity command starts it too, and its start checks the
   // AI server's models).
   await new Promise((r) => ai.listen(aiPort, '127.0.0.1', r));
   await step('1. No secret in the package', scanForSecrets);
 
-  await step('A throwaway login system (Keycloak, its own zip)', async () => {
+  await step('A throwaway login system (Keycloak) and key service (Vault), each from its own zip', async () => {
     await makeRealm();
-    return `realm ${REALM}: one person (processor and supervisor), one administrator`;
+    await transit();
+    return `realm ${REALM}: one person (processor and supervisor), one administrator; Transit on the key service`;
   });
 
   await step('2. Database, accounts and the schema step (administrator account)', () => {
@@ -498,6 +532,7 @@ try {
 } finally {
   await stopApp();
   endTree(keycloak);
+  endTree(vault);
   ai.close();
   summary();
   console.log(`\nRun folder: ${run} (logs, delivered files; fake values only)`);
