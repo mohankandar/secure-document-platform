@@ -277,7 +277,11 @@ try {
     await call('POST', `/api/v1/packages/${packageId}/submit`);
     const status = await until('the case to be delivered', async () => {
       const s = (await call('GET', `/api/v1/packages/${packageId}`)).status;
-      if (['FAILED', 'PENDING_REVIEW', 'IN_REVIEW'].includes(s)) throw new Error(`the case went to ${s}`);
+      if (['FAILED', 'PENDING_REVIEW', 'IN_REVIEW'].includes(s)) {
+        const detail = await call('GET', `/api/v1/packages/${packageId}`);
+        const codes = JSON.stringify(detail).match(/LV-[A-Z]{2,3}-d{3}|[A-Z]+_[A-Z_]{4,}/g) ?? [];
+        throw new Error(`the case went to ${s} (${[...new Set(codes)].slice(0, 8).join(' ')}); log: ${tail(join(run, 'logs', 'app-first.log'))}`);
+      }
       return s === 'COMPLETED' ? s : null;
     }, 240);
     const delivered = filesUnder(join(run, 'export')).filter((f) => f.endsWith('.pdf'));
