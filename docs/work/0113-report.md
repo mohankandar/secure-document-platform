@@ -36,7 +36,7 @@ Outcome: **DONE** (PR to follow on green CI)
   - `mvn -Pdev-build clean install -DskipTests` (online once, to fetch the 1.3.0 artifacts from GitHub Packages);
   - the full backend `mvn -o -Pdev-build verify` with PostgreSQL tests on a throwaway container: domain 91, application 411, scan bridge 144, infrastructure 216 (2 skipped), API 1002: 8 failed in the four classes above, all passing after the test changes (re-run of those classes: green);
   - `Update-LexaVault-DataDictionary.ps1`;
-  - frontend `tsc --noEmit`, `npm run test:standalone`: RESULT_FRONTEND.
+  - frontend `tsc --noEmit`, `npm run test:standalone`: vocabulary, ui-framework 19, OIDC 237, tablet 110, a11y 386 passed.
 - **Not run: the owner's one-command round (0106) before and after.** It needs the real models for about 25 minutes, twice. It is left for milestone M2 or the owner's test (TO-TEST), with the round of 2026-11-27 22:56 as the before.
 
 ## Questions
