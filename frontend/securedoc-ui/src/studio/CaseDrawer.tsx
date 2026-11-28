@@ -396,7 +396,7 @@ function headingFor(stage: StageKey, status: string, openFindings: number, actio
       return 'No open findings in the current queue';
     case 'approval': return actionable ? 'Ready for your sign-off' : 'Waiting for sign-off';
     case 'delivered': return life?.lastExportedAt ? `${STAGE_NAMES.delivered} to ${destinationName(life.lastDestinationType)}` : STAGE_NAMES.delivered;
-    case 'stopped': return status === 'REJECTED' ? 'Case rejected' : 'Processing stopped';
+    case 'stopped': return status === 'REJECTED' ? 'Case rejected' : status === 'CANCELLED' ? 'Case cancelled' : 'Processing stopped';
     default: return 'Status not recognised';
   }
 }

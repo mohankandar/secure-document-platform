@@ -149,7 +149,7 @@ try {
     }
     $findings = Invoke-Sql ("select coalesce(json_agg(json_build_object('doc', replace(d.file_name, '.pdf', ''), 'page', f.page_number, 'type', f.entity_type, " +
         "'box', case when f.bbox_left is null then null else json_build_array(f.bbox_left, f.bbox_top, f.bbox_width, f.bbox_height) end, " +
-        "'confidence', f.confidence, 'status', f.status, 'foundBy', f.found_by, 'models', f.ai_models)), '[]') from findings f join documents d on d.id = f.document_id")
+        "'confidence', f.confidence, 'status', f.status, 'foundBy', f.found_by, 'models', f.ai_models, 'why', f.detector_version)), '[]') from findings f join documents d on d.id = f.document_id")
     $routes = Invoke-Sql ("select coalesce(json_agg(json_build_object('doc', replace(d.file_name, '.pdf', ''), 'page', r.page_number, 'path', r.path, " +
         "'reasons', r.reasons, 'ocr', r.ocr_confidence)), '[]') from document_page_routes r join documents d on d.id = r.document_id")
     $logs = @(Get-ChildItem -LiteralPath $runDir -Filter '*.log' -Recurse) + @(Get-ChildItem -LiteralPath $runDir -Filter '*.jsonl' -Recurse)

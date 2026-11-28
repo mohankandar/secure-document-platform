@@ -77,6 +77,10 @@ platform:
     allow-internal-addresses: ${PLATFORM_OUTBOUND_ALLOW_INTERNAL_ADDRESSES:false}
 
 securedoc:
+  # Task 0111: a case that still has no documents this many days after it was opened is closed as expired (cancelled,
+  # off the dashboard, kept in Reports). Checked every hour.
+  cases:
+    empty-case-expiry-days: ${SECUREDOC_EMPTY_CASE_EXPIRY_DAYS:7}
   intake:
     space:
       # Task 0067: the safety stop. Below stop-below-percent free on a document storage disk, or of database-size-gb, intake

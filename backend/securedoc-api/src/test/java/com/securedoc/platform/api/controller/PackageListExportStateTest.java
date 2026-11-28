@@ -54,7 +54,11 @@ class PackageListExportStateTest {
         PackageController controller = new PackageController(mock(CreatePackageUseCase.class),
                 mock(UploadDocumentUseCase.class), mock(SubmitPackageUseCase.class),
                 mock(PackageProcessingDispatcher.class), mock(GetPackageQuery.class), list, context, exportJobs);
-        var body = controller.listPackages(0, 20, request).getBody();
+        var body = controller.listPackages(0, 20, false, request).getBody();
+        // Task 0111: the dashboard's list is its own query (hidden cases left out, stable order).
+        org.mockito.Mockito.verify(list, org.mockito.Mockito.never()).executeForDashboard(any(), anyInt(), anyInt());
+        assertEquals(0, controller.listPackages(0, 100, true, request).getBody().size(), "the dashboard query answers");
+        org.mockito.Mockito.verify(list).executeForDashboard(any(), eq(0), eq(100));
 
         assertEquals("WAITING_FOR_YOU", body.get(0).exportState());
         assertEquals("NONE", body.get(1).exportState());
@@ -80,6 +84,6 @@ class PackageListExportStateTest {
         PackageController controller = new PackageController(mock(CreatePackageUseCase.class),
                 mock(UploadDocumentUseCase.class), mock(SubmitPackageUseCase.class),
                 mock(PackageProcessingDispatcher.class), mock(GetPackageQuery.class), list, context);
-        assertEquals("NONE", controller.listPackages(0, 20, request).getBody().get(0).exportState());
+        assertEquals("NONE", controller.listPackages(0, 20, false, request).getBody().get(0).exportState());
     }
 }

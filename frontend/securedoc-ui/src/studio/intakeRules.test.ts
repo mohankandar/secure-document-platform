@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   MAX_UPLOAD_BYTES, countPdfPages, fileProblem, fileProblemText, hasPdfHeader, intakeRulesLine, prefillIdentifier, scannerDisplayName,
-  tooManyFilesText, tooManyPages,
+  tooManyFilesText, tooManyPages, inCodeOrder, lengthAllows,
 } from './intakeRules.ts';
 
 const bytes = (text: string) => new Uint8Array(Buffer.from(text, 'latin1'));
@@ -82,4 +82,21 @@ test('the result of an upload or a scan names the entity', async () => {
   assert.equal(uploadedWords(1, 'Acme Mortgage'), '1 file uploaded to Acme Mortgage.');
   assert.equal(scannedWords('Acme Mortgage', true), 'The scan was handed to Acme Mortgage.');
   assert.equal(scannedWords('Acme Mortgage', false), 'The scan was handed to LexaVault.');
+});
+
+test('0111 U5: choices in their code order', () => {
+  assert.deepEqual(inCodeOrder(['002 Loan', '000 Other', '010 Card', '001 Lease']), ['000 Other', '001 Lease', '002 Loan', '010 Card']);
+  assert.deepEqual(inCodeOrder(['B', 'a', 'C']), ['a', 'B', 'C']);
+});
+
+test('0111 U4: typing stops at the configured length', () => {
+  const exact = { exactLength: 9, maxLength: null, stripSeparators: true };
+  assert.equal(lengthAllows(exact, '123-45-678', '123-45-6789'), true, 'separators are not counted');
+  assert.equal(lengthAllows(exact, '123-45-6789', '123-45-67890'), false);
+  const max = { exactLength: null, maxLength: 5, stripSeparators: false };
+  assert.equal(lengthAllows(max, 'ABCD', 'ABCDE'), true);
+  assert.equal(lengthAllows(max, 'ABCDE', 'ABCDEF'), false);
+  assert.equal(lengthAllows(max, 'AB', 'ABC-DEF'), false, 'a paste past the limit is refused');
+  assert.equal(lengthAllows(max, 'ABCDEFGH', 'ABCDEFG'), true, 'a value already too long can be shortened');
+  assert.equal(lengthAllows({ exactLength: null, maxLength: null, stripSeparators: false }, '', 'x'.repeat(500)), true);
 });

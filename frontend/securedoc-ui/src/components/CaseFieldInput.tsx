@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { IdentifierDefinition } from '../types';
 import { DIGITS_PATTERN, HIDDEN_VALUE, readAddress, readValues, writeAddress, writeValues, type AddressParts } from '../studio/identity';
+import { inCodeOrder, lengthAllows } from '../studio/intakeRules';
 
 interface Props {
   id: string;
@@ -19,7 +20,6 @@ const ADDRESS_PARTS: [keyof AddressParts, string][] = [
 
 /** The date and time input takes no offset; what it shows is the entered local time. */
 const localDateTime = (value: string) => value.replace(/(:\d{2})?(Z|[+-]\d{2}:\d{2})$/, '');
-
 function One({ id, definition, value, locked, invalid, describedBy, onChange, onBlur, label }: Props & { label?: string }) {
   const common = { id, onBlur, 'aria-invalid': invalid, 'aria-describedby': describedBy, 'aria-label': label };
   if (definition.validationType === 'ADDRESS') {
@@ -38,7 +38,7 @@ function One({ id, definition, value, locked, invalid, describedBy, onChange, on
     return (
       <select {...common} value={value} disabled={locked} onChange={(e) => onChange(e.target.value)}>
         <option value="">Choose…</option>
-        {definition.allowedValues.map((v) => <option key={v} value={v}>{v}</option>)}
+        {inCodeOrder(definition.allowedValues).map((v) => <option key={v} value={v}>{v}</option>)}
       </select>
     );
   }
@@ -48,7 +48,7 @@ function One({ id, definition, value, locked, invalid, describedBy, onChange, on
     : definition.validationType === 'DECIMAL' || definition.validationType === 'MONEY' ? 'decimal' : undefined;
   const input = (
     <input {...common} type={type} value={type === 'datetime-local' ? localDateTime(value) : value} readOnly={locked} autoComplete="off" spellCheck={false}
-      inputMode={inputMode} onChange={(e) => onChange(e.target.value)} />
+      inputMode={inputMode} onChange={(e) => { if (lengthAllows(definition, value, e.target.value)) onChange(e.target.value); }} />
   );
   return definition.validationType === 'MONEY'
     ? <span className="cf-money">{input}<span className="cf-field-hint">{definition.currency}</span></span> : input;

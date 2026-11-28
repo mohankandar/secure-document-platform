@@ -108,3 +108,20 @@ export function uploadedWords(files: number, entity: string): string {
 export function scannedWords(entity: string, inThisEntity: boolean): string {
   return inThisEntity ? `The scan was handed to ${entity}.` : 'The scan was handed to LexaVault.';
 }
+
+/** Task 0111 (U5): a field's choices in their code order (000, 001, 002 …), whatever order they were saved in. */
+export const inCodeOrder = (values: string[]): string[] =>
+  [...values].sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+
+/**
+ * Task 0111 (U4): typing stops at the field's configured length (exact, else maximum), counted as the server counts it:
+ * without spaces and dashes when the field strips separators, so "123-45-6789" fits a 9-character field. Removing
+ * characters is always allowed, so a value that is already too long can still be corrected.
+ */
+export function lengthAllows(definition: { exactLength?: number | null; maxLength?: number | null; stripSeparators: boolean },
+  before: string, after: string): boolean {
+  const limit = definition.exactLength ?? definition.maxLength;
+  if (limit == null || limit <= 0 || after.length < before.length) return true;
+  const counted = definition.stripSeparators ? after.replace(/[ -]/g, '') : after;
+  return counted.length <= limit;
+}

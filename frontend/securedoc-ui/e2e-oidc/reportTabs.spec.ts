@@ -183,7 +183,7 @@ test('an answer of the wrong shape fails with the problem card; the tabs stay', 
 
 test('Cases opens with one reason code from Reports, and shows all again', async ({ page }) => {
   await openReports(page, 'supervisor', '/intake');
-  await page.route('**/api/v1/packages', (route) => route.request().method() === 'GET' ? route.fulfill({ status: 200, contentType: 'application/json',
+  await page.route((url) => url.pathname === '/api/v1/packages',(route) => route.request().method() === 'GET' ? route.fulfill({ status: 200, contentType: 'application/json',
     body: JSON.stringify([{ ...STOPPED_CASE, stopReasonCode: 'LV-PRC-004' }, DELIVERED_CASE]) }) : route.fallback());
   await go(page, '/?code=LV-PRC-004');
   await expect(page.getByText(/^Only cases with .*LV-PRC-004/)).toBeVisible();

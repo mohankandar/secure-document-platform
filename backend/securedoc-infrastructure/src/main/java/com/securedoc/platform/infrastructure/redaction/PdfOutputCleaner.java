@@ -164,11 +164,19 @@ final class PdfOutputCleaner {
         }
     }
 
+    /**
+     * Task 0111 (owner's test R6): a comment note (its text) is removed from the output, so its icon is not drawn into the
+     * page either: the icon would point to nothing. Used for copied pages and for pages drawn as an image.
+     */
+    static boolean drawnIntoThePage(PDAnnotation annotation) {
+        return !(annotation instanceof org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationText);
+    }
+
     /** Draws an annotation's normal appearance onto the page, in its place (PDF 32000-1, 12.5.5). */
     private static void flatten(PDDocument source, PDDocument output, PDPage page, PDAnnotation annotation)
             throws IOException {
         if (annotation instanceof PDAnnotationPopup || annotation instanceof PDAnnotationLink
-                || annotation.isHidden() || annotation.isNoView()) return;
+                || annotation.isHidden() || annotation.isNoView() || !drawnIntoThePage(annotation)) return;
         PDAppearanceStream appearance = annotation.getNormalAppearanceStream();
         if (appearance == null) {
             try {

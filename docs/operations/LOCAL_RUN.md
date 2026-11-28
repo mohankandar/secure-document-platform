@@ -9,7 +9,7 @@
 - PostgreSQL on `localhost:5432`, or Docker so the start script can launch the repository PostgreSQL compose service
 - a previously built backend JAR and frontend dependencies/build prerequisites
 
-The repository LOCAL start script uses Ollama `qwen3.5:4b` as the validated V1 LOCAL/demo reference model. The product/provider architecture remains model configurable; `gemma3:12b` is optional for larger hardware.
+The repository LOCAL start script uses Ollama `qwen3.5:9b` (text, page batch size 2 unless `SECUREDOC_AI_OLLAMA_PAGE_BATCH_SIZE` is set) and `qwen3-vl:8b-instruct` (vision, `SECUREDOC_AI_VISION_MODEL`) by default (task 0111). The product/provider architecture remains model configurable; `gemma3:12b` is optional for larger hardware.
 
 ## Recommended workflow
 
@@ -33,7 +33,7 @@ The start script:
 1. verifies Java, Node/npm, Ollama, and Tesseract;
 2. reuses PostgreSQL on port 5432 or starts the repository Docker Compose PostgreSQL service;
 3. reuses Ollama on port 11434 or starts `ollama serve`;
-4. requires `qwen3.5:4b` by default (or can pull it when `Start-LexaVault-Local.ps1 -PullModelIfMissing` is used);
+4. requires `qwen3.5:9b` and the vision model by default (or can pull them when `Start-LexaVault-Local.ps1 -PullModelIfMissing` is used);
 5. brings the database up to date with the real install steps (task 0037, `scripts/Initialize-LexaVault-LocalDatabase.ps1`):
    the schema step every time; on a fresh database, setup with the demo input files (`install/demo/`); then the
    LexaVault demo step, which makes the demo entity "Local Demo Tenant" (UUID `30216241-b724-5a3a-aef3-3034fd546d17`,

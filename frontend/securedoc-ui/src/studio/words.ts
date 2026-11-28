@@ -87,6 +87,8 @@ export const CASE_GROUPS = {
   inProgressNote: 'LexaVault or a colleague has these',
   stopped: STAGE_NAMES.stopped,
   delivered: STAGE_NAMES.delivered,
+  /** Task 0111: the button under a group that has more cases than it shows. */
+  showMore: (next: number, left: number) => `Show ${next} more (${left.toLocaleString()} not shown)`,
 } as const;
 
 /* ---------- Sensitive types ---------- */
@@ -470,6 +472,7 @@ export const NEXT_STEP = {
   sent: 'Redacted and sent',
   stopped: 'Processing stopped',
   notAccepted: 'Rejected, nothing more to do',
+  cancelled: 'Cancelled, nothing more to do',
   unknown: 'Status not recognised',
 } as const;
 
