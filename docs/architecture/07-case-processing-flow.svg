@@ -1,0 +1,172 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1470" role="img" aria-labelledby="ttl" xmlns:c2pa="http://c2pa.org/manifest">
+<title id="ttl">LexaVault case processing flow</title>
+<defs>
+<marker id="m" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk" d="M0 0L10 5L0 10z"/></marker>
+<marker id="mr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mkr" d="M0 0L10 5L0 10z"/></marker>
+<marker id="mw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mkw" d="M0 0L10 5L0 10z"/></marker>
+<marker id="mp" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mkp" d="M0 0L10 5L0 10z"/></marker>
+</defs>
+<style>
+text{font-family:Inter,"Segoe UI",system-ui,sans-serif}.ph{font-size:13px;font-weight:600}.lane{font-size:14px;font-weight:700}.ln{stroke-dasharray:4 6}
+.n,.ok,.src,.v{stroke-width:1.5}.ok{stroke-width:2.5}.src{stroke-width:1}.d{fill:#f5c518;stroke:#141414;stroke-width:1.5}.p{stroke:#f5c518;stroke-width:2}.w,.x{stroke-width:1.5}
+.t{font-size:14px}.b{font-weight:700;font-size:15px}.s{font-size:13px}.em{font-weight:600}.lab{font-size:12.5px;font-weight:600}
+.a,.aw,.ap,.ar{fill:none;stroke-width:1.6}.tagc{fill:#141414}.tagt{fill:#f5c518!important;font-size:13px;font-weight:700}text.dt{fill:#141414!important}
+.band0{fill:#ffffff}.band1{fill:#faf8f1}text{fill:#141414}.ph,.s,.lab{fill:#5c5a52}.em{fill:#141414}.ln{stroke:#e3dfd2}
+.n,.ok,.src{fill:#ffffff;stroke:#141414}.v{fill:#f1f0ea;stroke:#141414}.p{fill:#fff6cf}.w{fill:#fff1dc;stroke:#a15c07}.x{fill:#fdecea;stroke:#b42318}
+.a{stroke:#141414}.mk{fill:#141414}.aw{stroke:#a15c07}.mkw{fill:#a15c07}.ap{stroke:#b8920a}.mkp{fill:#b8920a}.ar{stroke:#b42318}.mkr{fill:#b42318}.d~text.dt{fill:#141414}
+@media (prefers-color-scheme:dark){.band0{fill:#111110}.band1{fill:#181816}text{fill:#f1efe8}.ph,.s,.lab{fill:#b3b0a5}.em{fill:#f1efe8}.ln{stroke:#2d2c28}
+.n,.ok,.src{fill:#1c1c1a;stroke:#f1efe8}.v{fill:#23231f;stroke:#f1efe8}.p{fill:#3a3214}.w{fill:#35260f;stroke:#f6b65c}.x{fill:#3a1714;stroke:#f97066}
+.a{stroke:#f1efe8}.mk{fill:#f1efe8}.aw{stroke:#f6b65c}.mkw{fill:#f6b65c}.ap{stroke:#f5c518}.mkp{fill:#f5c518}.ar{stroke:#f97066}.mkr{fill:#f97066}.d~text.dt{fill:#141414}}
+</style>
+<rect class="band0" x="0" y="70" width="1200" height="260"/>
+<text class="ph" x="16" y="96">1  Intake</text>
+<rect class="band1" x="0" y="330" width="1200" height="310"/>
+<text class="ph" x="16" y="356">2  Reading and finding</text>
+<rect class="band0" x="0" y="640" width="1200" height="390"/>
+<text class="ph" x="16" y="666">3  Redaction and its checks</text>
+<rect class="band1" x="0" y="1030" width="1200" height="230"/>
+<text class="ph" x="16" y="1056">4  Export</text>
+<rect class="band0" x="0" y="1260" width="1200" height="190"/>
+<text class="ph" x="16" y="1286">5  After delivery</text>
+<text class="lane" x="150.0" y="40" text-anchor="middle">Stops · goes to IT</text>
+<text class="lane" x="580.0" y="40" text-anchor="middle">Runs by itself</text>
+<text class="lane" x="1030.0" y="40" text-anchor="middle">Waits · a person or a destination</text>
+<line class="ln" x1="300" y1="60" x2="300" y2="1450"/>
+<line class="ln" x1="860" y1="60" x2="860" y2="1450"/>
+<rect class="src" x="324.0" y="96" width="96" height="46" rx="8"/>
+<text class="t s" x="372.0" y="115.5" text-anchor="middle">Manual</text>
+<text class="t s" x="372.0" y="134.5" text-anchor="middle">upload</text>
+<path class="a" d="M372.0 142 C372.0 162 580 158 580 178" marker-end="url(#m)"/>
+<rect class="src" x="428.0" y="96" width="96" height="46" rx="8"/>
+<text class="t s" x="476.0" y="115.5" text-anchor="middle">Watched</text>
+<text class="t s" x="476.0" y="134.5" text-anchor="middle">folder</text>
+<path class="a" d="M476.0 142 C476.0 162 580 158 580 178" marker-end="url(#m)"/>
+<rect class="src" x="532.0" y="96" width="96" height="46" rx="8"/>
+<text class="t s" x="580.0" y="115.5" text-anchor="middle">Push</text>
+<text class="t s" x="580.0" y="134.5" text-anchor="middle">API</text>
+<path class="a" d="M580.0 142 C580.0 162 580 158 580 178" marker-end="url(#m)"/>
+<rect class="src" x="636.0" y="96" width="96" height="46" rx="8"/>
+<text class="t s" x="684.0" y="125.0" text-anchor="middle">Polling</text>
+<path class="a" d="M684.0 142 C684.0 162 580 158 580 178" marker-end="url(#m)"/>
+<rect class="src" x="740.0" y="96" width="96" height="46" rx="8"/>
+<text class="t s" x="788.0" y="125.0" text-anchor="middle">Scanner</text>
+<path class="a" d="M788.0 142 C788.0 162 580 158 580 178" marker-end="url(#m)"/>
+<rect class="d" x="380.0" y="180" width="400" height="58" rx="29.0"/>
+<text class="t b dt" x="580.0" y="205.5" text-anchor="middle">Intake gate</text>
+<text class="t s dt" x="580.0" y="224.5" text-anchor="middle">room on this server now?</text>
+<rect class="w" x="884" y="180" width="292" height="58" rx="10"/>
+<text class="t b" x="1030.0" y="205.5" text-anchor="middle">No room yet</text>
+<text class="t s" x="1030.0" y="224.5" text-anchor="middle">file waits at its source, nothing lost</text>
+<path class="aw" d="M780.0 200 H882" marker-end="url(#mw)"/>
+<path class="aw" d="M884 222 H782.0" marker-end="url(#mw)"/>
+<path class="a" d="M580 238 V260" marker-end="url(#m)"/>
+<text class="lab" x="590" y="254.0" text-anchor="start">yes</text>
+<rect class="n" x="380.0" y="262" width="400" height="52" rx="10"/>
+<text class="t b" x="580.0" y="284.5" text-anchor="middle">Case created</text>
+<text class="t s" x="580.0" y="303.5" text-anchor="middle">case fields, priority, sensitivity level</text>
+<path class="a" d="M580 314 V348" marker-end="url(#m)"/>
+<rect class="n" x="380.0" y="350" width="400" height="62" rx="10"/>
+<text class="t b" x="580.0" y="368.0" text-anchor="middle">Read the text  ·  TEXT jobs</text>
+<text class="t s" x="580.0" y="387.0" text-anchor="middle">typed pages read directly, scanned pages by OCR</text>
+<text class="t s" x="580.0" y="406.0" text-anchor="middle">big documents split into page batches</text>
+<rect class="n" x="380.0" y="460" width="196" height="74" rx="10"/>
+<text class="t b" x="478.0" y="484.0" text-anchor="middle">Find  ·  FIND jobs</text>
+<text class="t s" x="478.0" y="503.0" text-anchor="middle">every page</text>
+<text class="t s" x="478.0" y="522.0" text-anchor="middle">patterns + AI text model</text>
+<rect class="v" x="584.0" y="460" width="196" height="74" rx="10"/>
+<text class="t b" x="682.0" y="484.0" text-anchor="middle">Vision  ·  VISION jobs</text>
+<text class="t s" x="682.0" y="503.0" text-anchor="middle">routed pages only</text>
+<text class="t s" x="682.0" y="522.0" text-anchor="middle">handwriting, ID, low OCR</text>
+<path class="a" d="M580 412 C580 436 478.0 432 478.0 458" marker-end="url(#m)"/>
+<path class="a" d="M580 412 C580 436 682.0 432 682.0 458" marker-end="url(#m)"/>
+<path class="a" d="M478.0 534 C478.0 560 580 556 580 574" marker-end="url(#m)"/>
+<path class="a" d="M682.0 534 C682.0 560 580 556 580 574" marker-end="url(#m)"/>
+<rect class="d" x="380.0" y="576" width="400" height="56" rx="28.0"/>
+<text class="t b dt" x="580.0" y="600.5" text-anchor="middle">Are all findings sure?</text>
+<text class="t s dt" x="580.0" y="619.5" text-anchor="middle">case gate: every document read and searched</text>
+<rect class="p" x="884" y="560" width="292" height="470" rx="10"/>
+<text class="t b" x="1030.0" y="600" text-anchor="middle">Review by a person</text>
+<text class="t s" x="1030.0" y="628" text-anchor="middle">Review page: confirm or dismiss</text>
+<text class="t s" x="1030.0" y="648" text-anchor="middle">each finding, add boxes by hand,</text>
+<text class="t s" x="1030.0" y="668" text-anchor="middle">check pages that can’t be read.</text>
+<text class="t s" x="1030.0" y="688" text-anchor="middle"></text>
+<text class="t s em" x="1030.0" y="708" text-anchor="middle">Decided: one stop per case.</text>
+<text class="t s em" x="1030.0" y="728" text-anchor="middle">A page the reviewer finished is</text>
+<text class="t s em" x="1030.0" y="748" text-anchor="middle">never shown again.</text>
+<path class="ap" d="M780.0 604 H882" marker-end="url(#mp)"/>
+<text class="lab" x="788.0" y="596" text-anchor="start">no, unsure</text>
+<path class="a" d="M580 632 V666" marker-end="url(#m)"/>
+<text class="lab" x="590" y="654.0" text-anchor="start">yes</text>
+<rect class="n" x="380.0" y="668" width="400" height="58" rx="10"/>
+<text class="t b" x="580.0" y="693.5" text-anchor="middle">Draw the boxes  ·  REDACT job</text>
+<text class="t s" x="580.0" y="712.5" text-anchor="middle">remove comments, metadata, hidden content</text>
+<path class="ap" d="M884 697 H782.0" marker-end="url(#mp)"/>
+<text class="lab" x="876" y="689" text-anchor="end">decisions done</text>
+<path class="a" d="M580 726 V756" marker-end="url(#m)"/>
+<rect class="d" x="380.0" y="758" width="400" height="62" rx="31.0"/>
+<text class="t b dt" x="580.0" y="776.0" text-anchor="middle">Redaction verified?</text>
+<text class="t s dt" x="580.0" y="795.0" text-anchor="middle">every box dark · page count same</text>
+<text class="t s dt" x="580.0" y="814.0" text-anchor="middle">no hidden value in any page’s text or the file</text>
+<rect class="x" x="24" y="740" width="252" height="280" rx="10"/>
+<text class="t b" x="150.0" y="780" text-anchor="middle">Stopped</text>
+<text class="t s" x="150.0" y="808" text-anchor="middle">Our defect or a failure</text>
+<text class="t s" x="150.0" y="828" text-anchor="middle">that won’t clear.</text>
+<text class="t s" x="150.0" y="848" text-anchor="middle"></text>
+<text class="t s" x="150.0" y="868" text-anchor="middle">Worked by IT in Support.</text>
+<text class="t s" x="150.0" y="888" text-anchor="middle">Counted “With IT” in Reports,</text>
+<text class="t s" x="150.0" y="908" text-anchor="middle">not on the business</text>
+<text class="t s" x="150.0" y="928" text-anchor="middle">dashboard. Find still</text>
+<text class="t s" x="150.0" y="948" text-anchor="middle">opens it.</text>
+<text class="t s" x="150.0" y="968" text-anchor="middle"></text>
+<text class="t s" x="150.0" y="988" text-anchor="middle">Also: a job retried past its</text>
+<text class="t s" x="150.0" y="1008" text-anchor="middle">attempt limit (LV-PRC-008).</text>
+<path class="ar" d="M380.0 789 H278" marker-end="url(#mr)"/>
+<text class="lab" x="370.0" y="781" text-anchor="end">no</text>
+<path class="a" d="M580 820 V854" marker-end="url(#m)"/>
+<text class="lab" x="590" y="842.0" text-anchor="start">yes</text>
+<rect class="d" x="380.0" y="856" width="400" height="58" rx="29.0"/>
+<text class="t b dt" x="580.0" y="881.5" text-anchor="middle">Final check</text>
+<text class="t s dt" x="580.0" y="900.5" text-anchor="middle">read the finished file again, rules + vision</text>
+<path class="ap" d="M780.0 885 H882" marker-end="url(#mp)"/>
+<text class="lab" x="788.0" y="877" text-anchor="start">holds a page</text>
+<path class="a" d="M580 914 V944" marker-end="url(#m)"/>
+<text class="lab" x="590" y="934.0" text-anchor="start">clean</text>
+<rect class="d" x="380.0" y="946" width="400" height="58" rx="29.0"/>
+<text class="t b dt" x="580.0" y="971.5" text-anchor="middle">Second check</text>
+<text class="t s dt" x="580.0" y="990.5" text-anchor="middle">independent AI reading · if the entity turns it on</text>
+<path class="ap" d="M780.0 975 H882" marker-end="url(#mp)"/>
+<text class="lab" x="788.0" y="967" text-anchor="start">found</text>
+<path class="a" d="M580 1004 V1044" marker-end="url(#m)"/>
+<text class="lab" x="590" y="1029.0" text-anchor="start">clean</text>
+<rect class="ok" x="380.0" y="1046" width="400" height="44" rx="10"/>
+<text class="t b" x="580.0" y="1074.0" text-anchor="middle">Redaction completed</text>
+<path class="a" d="M580 1090 V1116" marker-end="url(#m)"/>
+<rect class="n" x="380.0" y="1118" width="400" height="62" rx="10"/>
+<text class="t b" x="580.0" y="1136.0" text-anchor="middle">Export  ·  EXPORT job</text>
+<text class="t s" x="580.0" y="1155.0" text-anchor="middle">the whole case to the master destination</text>
+<text class="t s" x="580.0" y="1174.0" text-anchor="middle">a “duplicate” answer is recorded, never retried</text>
+<rect class="w" x="884" y="1100" width="292" height="98" rx="10"/>
+<text class="t b" x="1030.0" y="1126.5" text-anchor="middle">Destination paused</text>
+<text class="t s" x="1030.0" y="1145.5" text-anchor="middle">can’t connect or 500/502/503:</text>
+<text class="t s" x="1030.0" y="1164.5" text-anchor="middle">jobs wait, no attempts used,</text>
+<text class="t s" x="1030.0" y="1183.5" text-anchor="middle">health check until it answers</text>
+<path class="aw" d="M780.0 1138 H882" marker-end="url(#mw)"/>
+<text class="lab" x="788.0" y="1130" text-anchor="start">down</text>
+<path class="aw" d="M884 1166 H782.0" marker-end="url(#mw)"/>
+<text class="lab" x="876" y="1182" text-anchor="end">answers again</text>
+<path class="ar" d="M380.0 1160 H150.0 V1022" marker-end="url(#mr)"/>
+<text class="lab" x="370.0" y="1152" text-anchor="end">other failure</text>
+<text class="lab" x="370.0" y="1178" text-anchor="end">after spaced retries + IT alert</text>
+<path class="a" d="M580 1180 V1208" marker-end="url(#m)"/>
+<rect class="n" x="380.0" y="1210" width="400" height="44" rx="10"/>
+<text class="t b" x="580.0" y="1238.0" text-anchor="middle">Split documents to their own destinations</text>
+<path class="a" d="M580 1254 V1288" marker-end="url(#m)"/>
+<rect class="n" x="380.0" y="1290" width="400" height="62" rx="10"/>
+<text class="t b" x="580.0" y="1308.0" text-anchor="middle">Files deleted on schedule</text>
+<text class="t s" x="580.0" y="1327.0" text-anchor="middle">after the admin’s period: 24 h by default, never over 7 days</text>
+<text class="t s" x="580.0" y="1346.0" text-anchor="middle">(undelivered: 7 days, with IT alerts first)</text>
+<path class="a" d="M580 1352 V1382" marker-end="url(#m)"/>
+<rect class="ok" x="380.0" y="1384" width="400" height="56" rx="10"/>
+<text class="t b" x="580.0" y="1408.5" text-anchor="middle">Case record stays</text>
+<text class="t s" x="580.0" y="1427.5" text-anchor="middle">audit trail and Reports, no document content</text>
+<metadata><c2pa:manifest>AAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYTpjMTU4MzZjOS0wMGJlLTQzODctODVkNi1hM2I5MzMzNDQ2YjUAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaL6qk+7YIg6DrzvfyxBmp/kAAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDo1NTU5Y2RiMy1iMDA0LTQ0YmMtYjE5Ny1jZDYwZThkN2M1OGNscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNoDKQb8h5iP8sjb7dUIlqflQAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFggjbhCnIsDWk65A0mdxQHdDE0sAkO4yMwnpIirs74UzTykZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaFo2AjrbzGaiUo48Y0+cjmgAAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRMAAAAAAAAAAAAAAAAZGhhc2hYIC5qc4yaEeIB8GrT6Q2Y7LVlrTuA0q8kbC7Afd5c7qBvZG5hbWVuanVtYmYgbWFuaWZlc3RqZXhjbHVzaW9uc4GiZXN0YXJ0GTezZmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOmMxNTgzNmM5LTAwYmUtNDM4Ny04NWQ2LWEzYjkzMzM0NDZiNS9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOjZmN2FmZjg1LTY1N2QtNDUzYy04MWNhLWEzOGM4MWRmZDQxMnJjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCCNuEKciwNaTrkDSZ3FAd0MTSwCQ7jIzCekiKuzvhTNPKJjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggp0/XApo8FJfKphZfBtMa1XcLVTqEO87I0ig+DzagFCyiY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFgg7NJTa8QgfWed9bxsEreCcZSn0f80ZaN8OH+OdJJJbIh0Y2xhaW1fZ2VuZXJhdG9yX2luZm+jZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g/oGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd/3cyjxFA3Qo5S46fX0/ihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB/wQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj+OPEz5o+nMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn/aArXyTwFAZfKrPzxF2vPoJNf1+UCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9+1rdDwSPLMOPOjKuiXjoU/pUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQBbBC99hp62rTtaU0zfNNks8NcsX2vIMDIcOWZWrhsFnSLzmyPeX/cAOubIpuIQpcTzJfjBtZuOzWGLk0VmlIB8=</c2pa:manifest></metadata></svg>
