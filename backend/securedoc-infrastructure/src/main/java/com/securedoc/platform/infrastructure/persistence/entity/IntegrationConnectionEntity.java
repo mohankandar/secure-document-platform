@@ -31,6 +31,10 @@ public class IntegrationConnectionEntity {
     private String clientPrincipal;
     @Column(name = "endpoint", length = 1000)
     private String endpoint;
+
+    /** Migration 089 (task 0110): host names allowed to be internal or plain http, comma-separated; null: none. */
+    @Column(name = "allowed_hosts", length = 2000)
+    private String allowedHosts;
     @Column(name = "file_share_root", length = 1000)
     private String fileShareRoot;
     @Column(name = "secret_reference", length = 500)
@@ -99,6 +103,8 @@ public class IntegrationConnectionEntity {
     public void setClientPrincipal(String clientPrincipal) { this.clientPrincipal = clientPrincipal; }
     public String getEndpoint() { return endpoint; }
     public void setEndpoint(String endpoint) { this.endpoint = endpoint; }
+    public String getAllowedHosts() { return allowedHosts; }
+    public void setAllowedHosts(String allowedHosts) { this.allowedHosts = allowedHosts; }
     public String getFileShareRoot() { return fileShareRoot; }
     public void setFileShareRoot(String fileShareRoot) { this.fileShareRoot = fileShareRoot; }
     public String getSecretReference() { return secretReference; }

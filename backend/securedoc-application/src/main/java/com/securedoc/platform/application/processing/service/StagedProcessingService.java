@@ -424,6 +424,32 @@ public final class StagedProcessingService {
     // ------------------------------------------------------------------------------------------------- workers
 
     /** Task 0049: true while staged work is still to be done (after a switch back to inline it is finished first). */
+    private AiServerOutage aiOutage = AiServerOutage.never();
+    /** Task 0116: the stages that use the AI servers (REDACT: the final and second checks). */
+    private static final Set<PipelineStage> AI_STAGES = EnumSet.of(PipelineStage.FIND, PipelineStage.VISION,
+            PipelineStage.REDACT);
+
+    /** Task 0116: an AI server outage makes the work wait (see {@link AiServerOutage}). */
+    public StagedProcessingService withAiOutage(AiServerOutage outage) {
+        this.aiOutage = Objects.requireNonNull(outage);
+        return this;
+    }
+
+    /** Task 0116: during an outage no AI job is taken, for any case. */
+    private boolean waitsForAiServers(PipelineStage stage) {
+        return AI_STAGES.contains(stage) && aiOutage.paused();
+    }
+
+    /** Task 0116: the workers' maintenance: during an outage, whether the AI servers are back. */
+    public void probeAiServers() {
+        aiOutage.probe();
+    }
+
+    /** Task 0116: since when the AI work waits (the Cases banner); empty while the servers work. */
+    public Optional<java.time.Instant> aiWorkPausedSince() {
+        return aiOutage.pausedSince();
+    }
+
     public boolean hasOpenJobs() {
         return jobs.hasOpenStageJobs();
     }
@@ -431,6 +457,7 @@ public final class StagedProcessingService {
     /** The next due job of one stage, claimed with a new claim number. */
     public Optional<PipelineJob> claimNext(PipelineStage stage, String owner) {
         if (!STAGES.contains(stage)) throw new IllegalArgumentException("Not a staged processing stage: " + stage);
+        if (waitsForAiServers(stage)) return Optional.empty();
         // Stage jobs have no destination, so the per-destination limit does not apply.
         return jobs.claimNext(EnumSet.of(stage), owner, settings.claimLease(), 1);
     }
@@ -438,6 +465,7 @@ public final class StagedProcessingService {
     /** Task 0079: as above; a Bulk job only of these sources. */
     public Optional<PipelineJob> claimNext(PipelineStage stage, String owner, java.util.Set<String> openBulkSources) {
         if (!STAGES.contains(stage)) throw new IllegalArgumentException("Not a staged processing stage: " + stage);
+        if (waitsForAiServers(stage)) return Optional.empty();
         return jobs.claimNext(EnumSet.of(stage), owner, settings.claimLease(), 1, openBulkSources);
     }
 
@@ -456,6 +484,8 @@ public final class StagedProcessingService {
         List<ArtifactStorageReference> discarded = new ArrayList<>();
         if (job.stage() == PipelineStage.FIND && job.isPageBatch()) prepareFind(job, correlationId);
         VisionPageResult visionPage = job.stage() == PipelineStage.VISION ? readVisionPage(job, correlationId) : null;
+        // Task 0116: the page was not read because the AI servers are down: the job waits, it is not this page's.
+        if (AiServerOutage.outageKind(visionPage) && aiOutage.confirms()) return waitForAiServers(job, correlationId);
         try {
             transactions.inNewTransaction(() -> StagedStepScope.tracking(stored, discarded, () -> {
                 runStep(job, correlationId, visionPage);
@@ -463,6 +493,10 @@ public final class StagedProcessingService {
             }));
             // Saved: the batch results this step gathered are no longer needed.
             deleteStored(discarded);
+        } catch (WaitForAiServers outage) {
+            // Task 0116: nothing of the step was kept (its transaction rolled back); the job waits for the servers.
+            deleteStored(stored);
+            return waitForAiServers(job, correlationId);
         } catch (ClaimLost lost) {
             deleteStored(stored);
             log.warn("PIPELINE_JOB_CLAIM_LOST job={} stage={} package={} claimToken={} reasonCode=RESULT_NOT_SAVED",
@@ -567,10 +601,13 @@ public final class StagedProcessingService {
             code = precondition.lvCode() == null ? null : precondition.lvCode().code();
             detail = job.stage() == PipelineStage.REDACT ? "REVIEW_PRECONDITION" : "STEP_FAILED";
         } catch (StepFailure failure) {
+            // Task 0116: failed as an outage does while the AI servers are down: not this document's; it waits.
+            if (AiServerOutage.outageKind(failure.cause) && aiOutage.confirms()) throw new WaitForAiServers();
             recordStepFailure(job, document, failure.stage, failure.cause, correlationId);
             code = LvErrorCodes.forPlatformFailure(failure.cause).code();
             detail = "STEP_FAILED";
         } catch (RuntimeException failure) {
+            if (AiServerOutage.outageKind(failure) && aiOutage.confirms()) throw new WaitForAiServers();
             recordStepFailure(job, document, processingStage(job.stage()), failure, correlationId);
             code = LvErrorCodes.forPlatformFailure(failure).code();
             detail = "STEP_FAILED";
@@ -707,7 +744,12 @@ public final class StagedProcessingService {
     /** REDACT: the document is redacted with its safety check and the final check (task 0044), as inline. */
     private String redact(PipelineJob job, Document document, CorrelationId correlationId) {
         if (document.status() != DocumentStatus.REDACTING) return "ALREADY_" + document.status();
-        if (inline.hasDetectedFindings(document.id(), job.tenantId())) return "WAITING_FOR_REVIEW";
+        if (inline.hasDetectedFindings(document.id(), job.tenantId())) {
+            // Task 0119: one review stop per case: the final check's findings join the review now.
+            redactDocument.checkBeforeReview(RedactDocumentCommand.of(document.id(), job.packageId(), job.tenantId(),
+                    correlationId));
+            return "WAITING_FOR_REVIEW";
+        }
         try {
             redactDocument.execute(RedactDocumentCommand.of(document.id(), job.packageId(), job.tenantId(),
                     correlationId));
@@ -809,6 +851,11 @@ public final class StagedProcessingService {
     }
 
     private void decide(TenantId tenantId, PackageId packageId, CorrelationId correlationId) {
+        // Task 0119: the case's jobs are read first, before the case and its documents. A job and its document's result
+        // are saved together, so a job read as finished always has its document's new state in the reads after it (the
+        // case loads its documents, so it comes after too). Read the other way round, a document finishing in between
+        // was seen still waiting with its job finished, and a good case was stopped (LV-PRC-011).
+        List<PipelineJob> caseJobs = jobs.findByTenantIdAndPackageId(tenantId, packageId);
         DocumentPackage pkg = packageRepository.findByIdAndTenantId(packageId, tenantId).orElse(null);
         if (pkg == null || !OPEN.contains(pkg.status())) return;
         List<Document> documents = documentRepository.findByPackageIdAndTenantId(packageId, tenantId);
@@ -821,6 +868,10 @@ public final class StagedProcessingService {
         boolean anyFailed = documents.stream().anyMatch(document -> document.status() == DocumentStatus.FAILED);
         boolean needsReview = documents.stream().anyMatch(document ->
                 inline.hasDetectedFindings(document.id(), tenantId));
+        if (!anyFailed && needsReview && pkg.status() == PackageStatus.PROCESSING
+                && checkEveryDocumentBeforeReview(tenantId, packageId, documents, caseJobs, correlationId)) {
+            return;
+        }
         if (anyFailed || needsReview) {
             // Inline's own gate: a failed document fails the case; a finding for a person sends it to Review.
             inline.completeStagedPackageIfReady(packageId, tenantId, correlationId);
@@ -830,7 +881,7 @@ public final class StagedProcessingService {
                 .filter(document -> document.status() == DocumentStatus.REDACTING).toList();
         if (!waitingForRedaction.isEmpty()) {
             int cycle = lifecycleService.nextExportCycle(packageId, tenantId);
-            List<PipelineJob> existing = jobs.findByTenantIdAndPackageId(tenantId, packageId);
+            List<PipelineJob> existing = caseJobs;
             List<Document> nothingPlanned = new ArrayList<>();
             for (Document document : waitingForRedaction) {
                 PipelineJob done = pkg.status() != PackageStatus.PROCESSING ? null : existing.stream()
@@ -852,6 +903,36 @@ public final class StagedProcessingService {
         // Every document is redacted: Ready for export (final approval if the entity asks for it), as inline. The case
         // always ends in an export job, whatever export-mode says now: nothing is sent in this transaction (task 0052).
         inline.completeStagedPackageIfReady(packageId, tenantId, correlationId);
+    }
+
+    /** Task 0119: a REDACT job that is still to run (or running). */
+    private static final Set<PipelineJobStatus> OPEN_JOB = EnumSet.of(PipelineJobStatus.READY, PipelineJobStatus.RUNNING,
+            PipelineJobStatus.WAITING_RETRY, PipelineJobStatus.PAUSED);
+
+    /**
+     * Task 0119 (owner: one review stop per case). Before the case goes to Review, every document waiting for
+     * redaction has its REDACT run in this cycle: one with nothing for a person is redacted and checked (its final
+     * check may hold pages), one with findings for a person has the checks run on a trial file, so all its items are in
+     * this review. True while a run is queued or still running: the case goes to Review when the last one ends.
+     */
+    private boolean checkEveryDocumentBeforeReview(TenantId tenantId, PackageId packageId, List<Document> documents,
+                                                   List<PipelineJob> existing, CorrelationId correlationId) {
+        int cycle = lifecycleService.nextExportCycle(packageId, tenantId);
+        boolean waiting = false;
+        for (Document document : documents) {
+            if (document.status() != DocumentStatus.REDACTING) continue;
+            PipelineJob run = existing.stream()
+                    .filter(job -> job.stage() == PipelineStage.REDACT && document.id().equals(job.documentId())
+                            && job.exportCycle() == cycle)
+                    .findFirst().orElse(null);
+            if (run == null) {
+                queue(PipelineStage.REDACT, tenantId, packageId, document.id(), cycle, correlationId, false);
+                waiting = true;
+            } else if (OPEN_JOB.contains(run.status())) {
+                waiting = true;
+            }
+        }
+        return waiting;
     }
 
     /**
@@ -929,6 +1010,37 @@ public final class StagedProcessingService {
             case REDACT -> ProcessingStage.REDACTION;
             default -> ProcessingStage.DOCUMENT_PROCESSING;
         };
+    }
+
+    /** Task 0116: the AI servers are down: the step's transaction rolls back and its job waits for them. */
+    static final class WaitForAiServers extends RuntimeException {
+        WaitForAiServers() {
+            super(AiServerOutage.WAITING_FOR_AI_SERVER, null, false, false);
+        }
+    }
+
+    /**
+     * Task 0116: the job waits for the AI servers, using no try: due again after the probe interval, and not taken while
+     * the outage lasts. Fenced by the claim number, as every result.
+     */
+    private Outcome waitForAiServers(PipelineJob job, CorrelationId correlationId) {
+        String code = LvErrorCode.AI_001.code();
+        try {
+            transactions.inNewTransaction(() -> {
+                boolean saved = jobs.finish(job.id(), job.claimToken(), new PipelineJobRepository.Finish(
+                        PipelineJobStatus.WAITING_RETRY, job.attempts(), aiOutage.probeEvery(), code,
+                        AiServerOutage.WAITING_FOR_AI_SERVER, false, false, false));
+                if (!saved) throw new ClaimLost();
+                auditStatus(job, PipelineJobStatus.RUNNING, PipelineJobStatus.WAITING_RETRY, code,
+                        AiServerOutage.WAITING_FOR_AI_SERVER, correlationId);
+                return null;
+            });
+        } catch (ClaimLost lost) {
+            return Outcome.CLAIM_LOST;
+        }
+        log.info("PIPELINE_JOB_WAITING_FOR_AI_SERVER job={} stage={} package={} lvCode={}", job.id(), job.stage(),
+                job.packageId(), code);
+        return Outcome.DONE;
     }
 
     /** The claim is no longer current: the transaction rolls back and nothing of the step counts. */

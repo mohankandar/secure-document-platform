@@ -51,6 +51,11 @@ public enum TechnicalFailureCode {
     REDACTION_OUTPUT_UNPARSABLE,
     /** Task 0044, verification: a value that was redacted appears in the text of an output page (fail closed). */
     REDACTION_VALUE_IN_OUTPUT_TEXT,
+    /**
+     * Task 0119: the final check still found a value on a page a person finished (a box that did not cover it). Our
+     * defect: the document stops and is not delivered, and the page is not sent back to the reviewer.
+     */
+    REDACTION_VALUE_LEFT_ON_CHECKED_PAGE,
     UNKNOWN_TECHNICAL_FAILURE;
 
     /** The stable LexaVault code shown to IT Admin, where one is assigned (task 0021). */

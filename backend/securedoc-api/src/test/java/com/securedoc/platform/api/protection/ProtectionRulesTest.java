@@ -146,7 +146,8 @@ class ProtectionRulesTest {
         EraseLog eraseLog = new EraseLog(new FileEraseLogStore(folder.resolve("log")), Clock.systemUTC(), chain);
         EraseGuard guard = new EraseGuard(eraseLog, position, Clock.systemUTC());
         guard.checkAtStartup();
-        assertFalse(guard.mayTakeWork(), "platform-core's guard: not sealed");
+        // Task 0113: platform-core now seals a new keyed log by itself (the 0060 report). The app's own sealing stays harmless.
+        assertTrue(guard.mayTakeWork(), "platform-core's guard: sealed on its own");
         EraseLogWorkGate gate = new EraseLogWorkGate(guard, eraseLog, new DefaultApplicationArguments());
         assertTrue(gate.mayTakeWork(), "sealed by the app");
         assertEquals(CheckState.WORKING, new EraseLogCheck(guard).check().state());

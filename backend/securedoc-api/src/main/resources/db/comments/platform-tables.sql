@@ -66,6 +66,7 @@ COMMENT ON COLUMN idn_login_connection.status IS 'Connection status: DRAFT, VALI
 COMMENT ON COLUMN idn_login_connection.configuration_version IS 'Version number of the connection''s configuration, raised on each change and kept in the history.';
 COMMENT ON COLUMN idn_login_connection.created_at IS 'When the connection was created.';
 COMMENT ON COLUMN idn_login_connection.updated_at IS 'When the connection was last changed.';
+COMMENT ON COLUMN idn_login_connection.test_sign_in_version IS 'The version of this connection for which a test sign-in with a real token passed; replacing the active connection needs the draft''s current version here (platform-core 1.2.0).';
 
 -- idn_login_connection_history
 COMMENT ON TABLE idn_login_connection_history IS '(platform-core) Insert-only record of every version of every login connection, with who changed it.';
@@ -273,6 +274,7 @@ COMMENT ON COLUMN fld_field_definition.version IS 'Version of the definition, ra
 COMMENT ON COLUMN fld_field_definition.created_at IS 'When the field was created.';
 COMMENT ON COLUMN fld_field_definition.updated_at IS 'When the field was last changed.';
 COMMENT ON COLUMN fld_field_definition.updated_by IS 'Who last changed the field.';
+COMMENT ON COLUMN fld_field_definition.option_names IS 'Display names of a dropdown field''s values, in the order of options, empty for a value without one (platform-core 1.3.0); only the code is stored, matched and searched.';
 
 -- fld_field_definition_history
 COMMENT ON TABLE fld_field_definition_history IS '(platform-core) Every version of every case field definition, written with each change and never changed or deleted.';

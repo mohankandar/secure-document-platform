@@ -11,6 +11,8 @@ export interface BusinessIdentifierValidationConfiguration {
   caseNormalization: BusinessIdentifierCaseNormalization;
   stripSeparators: boolean;
   allowedValues: string[];
+  /** Task 0113 (U10): display names of the allowed values, by code; a value without one shows its code. */
+  allowedValueNames?: Record<string, string>;
   customPattern?: string | null;
   /** How Cases finds a value; a sensitive field only exactly. */
   searchMode?: CaseFieldSearchMode;
@@ -94,6 +96,8 @@ export interface SensitiveDataPolicyConfiguration {
   secondCheckEnabled?: boolean;
   /** Task 0065: a document's people are looked for on every page. Absent from an older server: off. */
   documentContextEnabled?: boolean;
+  /** Task 0119: the final check reads picture pages no person looked at again (OCR and the vision model). Absent from an older server: on. */
+  finalCheckRereadEnabled?: boolean;
   /** Task 0062: regulation packs in force, and the kinds whose last four digits stay visible. */
   enabledPacks?: string[];
   keepLastFourKinds?: string[];
@@ -652,6 +656,8 @@ export interface IntegrationConnection {
   authenticationType: IntegrationAuthenticationType;
   clientPrincipal?: string | null;
   endpoint?: string | null;
+  /** Task 0110: host names allowed to be internal or plain http. Absent from an older server: none. */
+  allowedHosts?: string[];
   fileShareRoot?: string | null;
   secretConfigured: boolean;
   timeoutSeconds: number;
@@ -722,6 +728,8 @@ export interface IntegrationConnectionRequest {
   authenticationType: IntegrationAuthenticationType;
   clientPrincipal?: string;
   endpoint?: string;
+  /** Task 0110: host names allowed to be internal or plain http; absent keeps the stored ones. */
+  allowedHosts?: string[];
   fileShareRoot?: string;
   secretReference?: string;
   clearSecretReference?: boolean;

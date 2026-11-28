@@ -59,6 +59,7 @@ public class ComplianceReportController {
     public record CreateComplianceReportRequest(String period, LocalDate from, LocalDate to, String timeZone,
                                                 Boolean includeFullAuditTrail) { }
 
+    @com.securedoc.platform.api.security.OpenEndpoint("checks its two report capabilities itself and records its own refusal")
     @PostMapping(produces = MediaType.APPLICATION_PDF_VALUE)
     public ResponseEntity<byte[]> create(@RequestBody(required = false) CreateComplianceReportRequest body,
                                          HttpServletRequest request) {

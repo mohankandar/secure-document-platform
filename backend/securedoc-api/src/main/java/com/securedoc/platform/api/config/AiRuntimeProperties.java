@@ -15,6 +15,8 @@ public class AiRuntimeProperties {
     private String provider = "ollama";
     private String baseUrl = "http://localhost:11434";
     private String model = "qwen2.5:7b";
+    /** Task 0110: the approved digest of the deployment text model (64 hexadecimal characters). */
+    private String modelDigest = "";
     private String apiKey = "";
     private int timeoutSeconds = 60;
     private int parallelism = 2;
@@ -60,6 +62,8 @@ public class AiRuntimeProperties {
     public void setBaseUrl(String baseUrl) { this.baseUrl = baseUrl; }
     public String getModel() { return model; }
     public void setModel(String model) { this.model = model; }
+    public String getModelDigest() { return modelDigest; }
+    public void setModelDigest(String modelDigest) { this.modelDigest = modelDigest; }
     public String getApiKey() { return apiKey; }
     public void setApiKey(String apiKey) { this.apiKey = apiKey; }
     public int getTimeoutSeconds() { return timeoutSeconds; }

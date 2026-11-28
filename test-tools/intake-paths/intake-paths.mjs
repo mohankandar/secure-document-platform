@@ -364,7 +364,7 @@ let pollingLeft = 0;
 async function polling() {
   const path = 'File polling';
   pollingId = (await must('POST', '/api/v1/integrations', { body: { name: 'Polled source 0077', purpose: 'INGESTION_SOURCE', direction: 'OUTBOUND',
-    providerType: 'HTTP_API', authenticationType: 'NONE', endpoint: `http://localhost:${sourcePort}`, enabled: true, acknowledgementMode: 'SOURCE_PICKUP_ACK',
+    providerType: 'HTTP_API', authenticationType: 'NONE', endpoint: `http://localhost:${sourcePort}`, allowedHosts: ['localhost'], enabled: true, acknowledgementMode: 'SOURCE_PICKUP_ACK',
     timeoutSeconds: 30, retryMaxAttempts: 0, incompleteWindowHours: 24, maxDocumentsPerIntake: 5, maxPdfSizeBytes: 2 * MB, maxPdfPages: 100,
     pollingScheduleType: 'INTERVAL', pollingIntervalMinutes: 1440, pollingBatchLimit: 10 } })).connectionId;
   const send = async (file, bytes, type = 'application/pdf') => {

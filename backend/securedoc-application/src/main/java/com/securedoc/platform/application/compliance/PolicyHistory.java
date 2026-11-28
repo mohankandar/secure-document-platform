@@ -28,7 +28,15 @@ public final class PolicyHistory {
     public record SensitivePolicy(Set<String> types, Integer enabledCount, Double threshold, String reviewMode,
                                   Boolean maskSsnLastFour, String preset, Set<String> packs,
                                   Set<String> keepLastFour, VisionSettings vision, boolean secondCheck,
-                                  boolean documentContext) {
+                                  boolean documentContext, boolean finalCheckReread) {
+
+        /** Before task 0119: the final check reads picture pages again (on). */
+        public SensitivePolicy(Set<String> types, Integer enabledCount, Double threshold, String reviewMode,
+                               Boolean maskSsnLastFour, String preset, Set<String> packs, Set<String> keepLastFour,
+                               VisionSettings vision, boolean secondCheck, boolean documentContext) {
+            this(types, enabledCount, threshold, reviewMode, maskSsnLastFour, preset, packs, keepLastFour, vision,
+                    secondCheck, documentContext, true);
+        }
 
         /** Without packs or styles (before task 0062: none). */
         public SensitivePolicy(Set<String> types, Integer enabledCount, Double threshold, String reviewMode,
@@ -39,25 +47,32 @@ public final class PolicyHistory {
 
         public SensitivePolicy with(Set<String> packNames, Set<String> lastFour) {
             return new SensitivePolicy(types, enabledCount, threshold, reviewMode, maskSsnLastFour, preset,
-                    new TreeSet<>(packNames), new TreeSet<>(lastFour), vision, secondCheck, documentContext);
+                    new TreeSet<>(packNames), new TreeSet<>(lastFour), vision, secondCheck, documentContext,
+                    finalCheckReread);
         }
 
         /** Task 0064. */
         public SensitivePolicy withVision(VisionSettings settings) {
             return new SensitivePolicy(types, enabledCount, threshold, reviewMode, maskSsnLastFour, preset, packs,
-                    keepLastFour, settings, secondCheck, documentContext);
+                    keepLastFour, settings, secondCheck, documentContext, finalCheckReread);
         }
 
         /** Task 0083. */
         public SensitivePolicy withSecondCheck(boolean on) {
             return new SensitivePolicy(types, enabledCount, threshold, reviewMode, maskSsnLastFour, preset, packs,
-                    keepLastFour, vision, on, documentContext);
+                    keepLastFour, vision, on, documentContext, finalCheckReread);
         }
 
         /** Task 0065. */
         public SensitivePolicy withDocumentContext(boolean on) {
             return new SensitivePolicy(types, enabledCount, threshold, reviewMode, maskSsnLastFour, preset, packs,
-                    keepLastFour, vision, secondCheck, on);
+                    keepLastFour, vision, secondCheck, on, finalCheckReread);
+        }
+
+        /** Task 0119. */
+        public SensitivePolicy withFinalCheckReread(boolean on) {
+            return new SensitivePolicy(types, enabledCount, threshold, reviewMode, maskSsnLastFour, preset, packs,
+                    keepLastFour, vision, secondCheck, documentContext, on);
         }
 
         public static SensitivePolicy of(Set<String> types, double threshold, ReviewMode mode, boolean mask) {
@@ -219,6 +234,10 @@ public final class PolicyHistory {
             lines.add("Document summary and case instructions: " + yesNo(before.documentContext()) + " → "
                     + yesNo(after.documentContext()));
         }
+        if (before.finalCheckReread() != after.finalCheckReread()) {
+            lines.add("Final check reads picture pages again: " + yesNo(before.finalCheckReread()) + " → "
+                    + yesNo(after.finalCheckReread()));
+        }
         if (before.secondCheck() != after.secondCheck()) {
             lines.add("Second check of the finished file: " + yesNo(before.secondCheck()) + " → "
                     + yesNo(after.secondCheck()));
@@ -289,7 +308,8 @@ public final class PolicyHistory {
                 enumWord(k.get("reviewMode")), k.containsKey("maskSsnLastFour") ? parseBoolean(k.get("maskSsnLastFour")) : null,
                 enumWord(k.get("preset"))).with(list(k.get("packs")), list(k.get("keepLastFour")))
                 .withVision(vision(k)).withSecondCheck("true".equals(k.get("secondCheck")))
-                .withDocumentContext("true".equals(k.get("documentContext")));
+                .withDocumentContext("true".equals(k.get("documentContext")))
+                .withFinalCheckReread(!"false".equals(k.get("finalCheckReread")));
     }
 
     private static Set<String> list(String value) {

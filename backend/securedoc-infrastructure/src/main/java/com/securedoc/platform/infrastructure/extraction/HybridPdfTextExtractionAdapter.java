@@ -79,6 +79,28 @@ public class HybridPdfTextExtractionAdapter implements TextExtractionPort {
         return extract(content, mimeType, pageNumbers == null ? null : Set.copyOf(pageNumbers), null, true).text();
     }
 
+    /** Task 0119: the stored text of every page with its form fields; no OCR. */
+    @Override
+    public TextExtractionOutput extractTextLayer(InputStream content, String mimeType) {
+        if (!PDF_MIME_TYPE.equals(mimeType)) return nativeExtractor.extract(content, mimeType);
+        try (PdfBoxTempFileSupport.StagedPdf staged = PdfBoxTextExtractionAdapter.stageForProcessing(content,
+                "lexavault-text-layer-")) {
+            PDDocument document = staged.document();
+            PdfBoxTextExtractionAdapter.refuseUnreadableForm(document);
+            TextExtractionOutput stored = nativeExtractor.extractDocument(document);
+            List<PageText> pages = new ArrayList<>(stored.pages().size());
+            long characters = 0;
+            for (PageText page : stored.pages()) {
+                PageText withFields = PdfFormFieldText.with(document, document.getPage(page.pageNumber() - 1), page);
+                pages.add(withFields);
+                characters += withFields.text().length();
+            }
+            return new TextExtractionOutput(pages, characters, stored.hasEmbeddedText(), false);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to read the PDF's text", e);
+        }
+    }
+
     /**
      * @param onlyPages      null: every page
      * @param routeThreshold task 0064: null routes no page

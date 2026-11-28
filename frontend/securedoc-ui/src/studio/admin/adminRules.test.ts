@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { HOUR_UNITS, MINUTE_UNITS, bundleLabel, bundleName, bundleNames, durationText, fieldRule, pickUnit, toBase } from './adminRules.ts';
+import { HOUR_UNITS, MINUTE_UNITS, bundleLabel, bundleName, bundleNames, durationText, fieldRule, pickUnit, splitValueLines, toBase, valueLines } from './adminRules.ts';
 
 test('a stored duration shows in the largest unit it is a whole number of', () => {
   assert.equal(pickUnit(168, HOUR_UNITS).name, 'days');
@@ -79,4 +79,12 @@ test('case field rules are spelled out', () => {
   for (const t of ['TEXT', 'NUMBER', 'DECIMAL', 'MONEY', 'DATE', 'DATE_TIME', 'EMAIL', 'UUID', 'DROPDOWN', 'ADDRESS', 'CUSTOM_PATTERN']) {
     assert.doesNotMatch(fieldRule(field({ validationType: t, allowedValues: ['A'] })), /[A-Z]{3,}/, `${t} shows no code`);
   }
+});
+
+test('0113 (U10): allowed values are edited as "code = name" lines; the codes stay, in order', () => {
+  assert.deepEqual(valueLines(['000', '001', '002'], { '000': 'Club', '002': 'Asia Pacific' }), ['000 = Club', '001', '002 = Asia Pacific']);
+  assert.deepEqual(splitValueLines(['000 = Club', ' 001 ', '002 =  Asia Pacific ', '', '003 =']), {
+    allowedValues: ['000', '001', '002', '003'],
+    allowedValueNames: { '000': 'Club', '002': 'Asia Pacific' },
+  });
 });

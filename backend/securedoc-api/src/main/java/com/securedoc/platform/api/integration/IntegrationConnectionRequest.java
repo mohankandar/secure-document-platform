@@ -25,5 +25,7 @@ public record IntegrationConnectionRequest(
         Integer pollingBatchLimit,
         String acknowledgementMode,
         Boolean enabled,
-        com.securedoc.platform.domain.integration.DestinationSettings destination) {
+        com.securedoc.platform.domain.integration.DestinationSettings destination,
+        /* Task 0110: host names allowed to be internal or plain http (by name only). */
+        java.util.Set<String> allowedHosts) {
 }

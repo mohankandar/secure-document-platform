@@ -128,3 +128,18 @@ export function canonicalIdentity(definitions: IdentifierDefinition[], values: R
 
 /** Task 0061: the keys whose values the Scan Bridge keeps in memory only. */
 export const sensitiveKeys = (definitions: IdentifierDefinition[]): string[] => definitions.filter((d) => d.sensitive).map((d) => d.key);
+
+/** Task 0113 (U10): what people see for a stored value: its display name, or the code itself when it has none. */
+export function valueName(definition: Pick<IdentifierDefinition, 'allowedValueNames'>, code: string): string {
+  return definition.allowedValueNames?.[code] || code;
+}
+
+/**
+ * Task 0113 (U10): the choices of a dropdown in the order people see them: the Business Admin's order once values have
+ * names, the codes' order otherwise (task 0111).
+ */
+export function choiceOrder(definition: Pick<IdentifierDefinition, 'allowedValues' | 'allowedValueNames'>,
+                            byCode: (codes: string[]) => string[]): string[] {
+  const named = Object.keys(definition.allowedValueNames ?? {}).length > 0;
+  return named ? [...definition.allowedValues] : byCode(definition.allowedValues);
+}

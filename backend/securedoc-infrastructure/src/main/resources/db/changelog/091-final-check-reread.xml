@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!--
+        Task 0119 (owner decision 2026-11-28 00:28). Whether the final check reads again, with OCR and the vision model,
+        the picture pages no person looked at in the case. On for every entity; the Business Admin can turn it off.
+        The final check's text search of every page is not a setting.
+    -->
+    <changeSet id="091-01-final-check-reread" author="lexavault">
+        <addColumn tableName="tenant_redaction_policies">
+            <column name="final_check_reread_enabled" type="BOOLEAN" defaultValueBoolean="true"
+                    remarks="Whether the final check reads again, with OCR and the vision model, the picture pages no person looked at in the case, on by default.">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+        <rollback>
+            <dropColumn tableName="tenant_redaction_policies" columnName="final_check_reread_enabled"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

@@ -186,6 +186,11 @@ public interface PipelineJobRepository {
     /** Task 0036: the same jobs counted per destination id and status (Support's "Waiting": each state on its own). */
     Map<UUID, Map<PipelineJobStatus, Integer>> countOpenByDestinationAndStatus(TenantId tenantId);
 
+    /** Task 0116: the entity's cases with a job waiting for this reason (its detail), e.g. the AI servers. */
+    default int countCasesWaiting(TenantId tenantId, String detail) {
+        return 0;
+    }
+
     /**
      * A worker's result.
      *

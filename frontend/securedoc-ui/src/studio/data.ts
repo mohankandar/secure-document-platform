@@ -328,6 +328,13 @@ export function useExportAlert(enabled: boolean, badge = false) {
     { refreshInterval: 15000, shouldRetryOnError: false });
 }
 
+/** Task 0116: the Cases banner while processing waits for the AI servers; null when it cannot be read. */
+export function useProcessingPause(enabled: boolean) {
+  const isPause = (v: unknown) => isRecord(v) && typeof v.casesWaiting === 'number';
+  return useSWR(enabled ? 'processing-pause' : null, () => quietly(apiClient.getProcessingPause(), isPause),
+    { refreshInterval: 30000, shouldRetryOnError: false });
+}
+
 /** A case's name and documents for a row that only has its id (Waiting for you, Support): fetched once, not refreshed. */
 export function useCaseBrief(packageId: string | undefined) {
   return useSWR(packageId ? ['case-brief', packageId] : null,
