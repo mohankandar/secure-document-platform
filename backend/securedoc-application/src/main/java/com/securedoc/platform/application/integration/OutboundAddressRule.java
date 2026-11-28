@@ -22,6 +22,16 @@ public final class OutboundAddressRule {
 
     public enum Refusal { INVALID, NOT_HTTPS, INTERNAL_ADDRESS, NOT_RESOLVED }
 
+    /** The words for a refusal; names no address. */
+    public static String message(Refusal refusal) {
+        return switch (refusal) {
+            case INVALID -> "not a valid https address";
+            case NOT_HTTPS -> "must use https, or its host name must be in the allowed hosts";
+            case INTERNAL_ADDRESS -> "reaches an internal address; add its host name to the allowed hosts to use it";
+            case NOT_RESOLVED -> "its host name could not be found";
+        };
+    }
+
     /** Resolves a host to its addresses; the default asks the system resolver each time. */
     @FunctionalInterface
     public interface Resolver {

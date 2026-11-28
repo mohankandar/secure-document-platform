@@ -23,7 +23,7 @@ import { MINUTE_UNITS } from './adminRules';
 import {
   ACK_NAMES, AUTH_NAMES, DEFAULT_MAX_PDF_SIZE_BYTES, RECEIVE_METHODS, SEND_METHODS, SOURCE_FILES_HINT, SOURCE_MAX_FILES, SOURCE_MAX_PAGES, SOURCE_PAGES_HINT, VIEWS,
   advancedSummary, attentionLine, attentionTitle, authName, capToCaseLimits,
-  connectionStatus, connectionTag, draftTestResult, failureReason, folderCheckResult, isPolling, methodOf, slashParts, watchedFolderStatus,
+  connectionStatus, connectionTag, draftTestResult, failureReason, folderCheckResult, hostList, isPolling, methodOf, slashParts, watchedFolderStatus,
   type Method, type StatusLine, type View,
 } from './integrationRules';
 import RoutingRules from './RoutingRules';
@@ -34,7 +34,7 @@ import { HelpTip } from './HelpTip';
 import type { HelpKey } from './helpTexts';
 import { LvText } from '../help/LvCodeLink';
 
-type Draft = IntegrationConnectionRequest & { connectionId?: string; secretConfigured?: boolean };
+type Draft = IntegrationConnectionRequest & { connectionId?: string; secretConfigured?: boolean; allowedHostsText?: string };
 
 const MB = 1048576;
 
@@ -80,6 +80,7 @@ function toDraft(c: IntegrationConnection): Draft {
   return capToCaseLimits({
     connectionId: c.connectionId, name: c.name, description: c.description || '', purpose: c.purpose, direction: c.direction,
     providerType: c.providerType, authenticationType: c.authenticationType, clientPrincipal: c.clientPrincipal || '', endpoint: c.endpoint || '',
+    allowedHostsText: (c.allowedHosts ?? []).join(', '),
     fileShareRoot: c.fileShareRoot || '', timeoutSeconds: c.timeoutSeconds, retryMaxAttempts: c.retryMaxAttempts,
     incompleteWindowHours: c.incompleteWindowHours, maxDocumentsPerIntake: c.maxDocumentsPerIntake, maxPdfSizeBytes: c.maxPdfSizeBytes,
     maxPdfPages: c.maxPdfPages, pollingScheduleType: c.pollingScheduleType || undefined, pollingIntervalMinutes: c.pollingIntervalMinutes || undefined,
@@ -101,6 +102,7 @@ function toPayload(d: Draft, profile?: DestinationProfile): IntegrationConnectio
     authenticationType: d.authenticationType,
     clientPrincipal: d.providerType === 'PUSH_API' || scanner ? d.clientPrincipal || undefined : undefined,
     endpoint: d.providerType === 'HTTP_API' ? d.endpoint || undefined : undefined,
+    allowedHosts: d.providerType === 'HTTP_API' ? hostList(d.allowedHostsText) : undefined,
     fileShareRoot: d.providerType === 'FILE_SHARE' ? d.fileShareRoot || undefined : undefined,
     secretReference: d.secretReference || undefined,
     timeoutSeconds: d.timeoutSeconds,
@@ -664,6 +666,10 @@ function ConnectionEditor({ draft, original, onChange, onClose, onSaved }: {
                 {hasAddress && (
                   <div className="cf-ad-span"><TextField label="Address" required mono value={d.endpoint || ''} placeholder="https://…" onChange={(v) => set('endpoint', v)}
                     hint={method === 'POLL' ? 'The web address LexaVault collects documents from.' : 'The web address LexaVault sends to.'} /></div>
+                )}
+                {hasAddress && (
+                  <div className="cf-ad-span"><TextField label="Internal hosts allowed" mono value={d.allowedHostsText || ''} placeholder="archive.corp.local" onChange={(v) => set('allowedHostsText', v)}
+                    hint="Only for a system inside your network. Its host name (not an address), if the address above is internal or uses http. Leave empty for a service on the internet, which must use https." /></div>
                 )}
                 {method === 'BARCODE_SHARE' && (
                   <div className="cf-ad-span"><TextField label="Folder on the file share" required mono value={d.fileShareRoot || ''} placeholder="\\server\share\folder" onChange={(v) => set('fileShareRoot', v)}

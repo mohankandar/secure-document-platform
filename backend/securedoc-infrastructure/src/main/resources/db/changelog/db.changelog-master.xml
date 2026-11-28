@@ -23,6 +23,7 @@
     <include file="db/changelog/086-refused-drop-cases.xml"/>
     <include file="db/changelog/087-finding-placement.xml"/>
     <include file="db/changelog/088-audit-records-append-only.xml"/>
+    <include file="db/changelog/089-connection-allowed-hosts.xml"/>
     <include file="db/changelog/014-integration-connection-foundation.xml"/>
     <include file="db/changelog/015-external-machine-intake.xml"/>
     <include file="db/changelog/016-polling-ingestion.xml"/>

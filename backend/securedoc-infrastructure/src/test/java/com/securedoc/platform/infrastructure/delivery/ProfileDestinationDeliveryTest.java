@@ -203,8 +203,17 @@ class ProfileDestinationDeliveryTest {
     }
 
     @Test
+    void anAddressNoLongerAllowedIsRefusedWhenItConnectsAndNothingIsSent() {
+        // Hardening: outbound addresses limited, checked again at connect time (a stored connection, its host removed).
+        set(c -> c.withAllowedHosts(java.util.Set.of()));
+        var e = fails(adapter(true), one(), LvErrorCode.DLV_006);
+        assertFalse(e.retryable());
+        assertTrue(archive.calls.isEmpty(), "nothing reaches the address");
+    }
+
+    @Test
     void nobodyThereIsLvDlv001() {
-        set(c -> withEndpoint(c, "http://127.0.0.1:1"));
+        set(c -> withEndpoint(c, "http://localhost:1"));
         var e = fails(adapter(true), one(), LvErrorCode.DLV_001);
         assertTrue(e.retryable());
         assertEquals("INT_CANT_CONNECT", e.destinationCode());
@@ -309,7 +318,7 @@ class ProfileDestinationDeliveryTest {
         archive.faults.add(new ArchiveServer.Fault(503, "ARC-DOWN", null, true));
         fails(adapter(true), one(), LvErrorCode.DLV_002);
         String progress = noted.get(noted.size() - 1);
-        set(c -> withEndpoint(c, archive.address() + "/moved"));
+        set(c -> withEndpoint(c, local(archive.address()) + "/moved"));
         fails(adapter(true), batch(List.of(item("doc-a", SensitivityLevel.STANDARD)), SensitivityLevel.STANDARD, progress, Map.of()), LvErrorCode.DLV_016);
         assertThrows(RuntimeException.class, () -> adapter(true).deliverBatch(
                 batch(List.of(item("doc-a", SensitivityLevel.STANDARD)), SensitivityLevel.STANDARD, "{broken", Map.of())));
@@ -412,7 +421,7 @@ class ProfileDestinationDeliveryTest {
                     () -> profiles.checked(repository.current.withDestination(bad))).lvCode());
         }
         IntegrationConnection otherSecret = IntegrationConnection.create(tenant, "Store", null, IntegrationPurpose.DOCUMENT_STORE_DELIVERY,
-                IntegrationDirection.OUTBOUND, IntegrationProviderType.HTTP_API, IntegrationAuthenticationType.JWT, null, archive.address(), null,
+                IntegrationDirection.OUTBOUND, IntegrationProviderType.HTTP_API, IntegrationAuthenticationType.JWT, null, local(archive.address()), null,
                 "env:DB_PASSWORD", 5, 0, 24, 10, 10_000_000L, 100, IntegrationAcknowledgementMode.SUBMISSION_ACK, true, Instant.now())
                 .withDestination(repository.current.destination());
         assertThrows(ValidationException.class, () -> profiles.checked(otherSecret));
@@ -539,9 +548,10 @@ class ProfileDestinationDeliveryTest {
 
     private IntegrationConnection connection(DestinationSettings d, int retries) {
         return IntegrationConnection.create(tenant, "Store", null, IntegrationPurpose.DOCUMENT_STORE_DELIVERY, IntegrationDirection.OUTBOUND,
-                IntegrationProviderType.HTTP_API, IntegrationAuthenticationType.OAUTH2_CLIENT_CREDENTIALS, null, archive.address(), null,
+                IntegrationProviderType.HTTP_API, IntegrationAuthenticationType.OAUTH2_CLIENT_CREDENTIALS, null, local(archive.address()), null,
                 "env:LEXAVAULT_SECRET_" + tenant.value().toString().replace("-", "").toUpperCase() + "_STORE", 5, retries, 24, 10, 10_000_000L, 100,
-                IntegrationAcknowledgementMode.SUBMISSION_ACK, true, Instant.now()).withDestination(d);
+                IntegrationAcknowledgementMode.SUBMISSION_ACK, true, Instant.now()).withDestination(d)
+                .withAllowedHosts(java.util.Set.of("localhost"));
     }
 
     private void set(DestinationSettings d) {
@@ -552,10 +562,16 @@ class ProfileDestinationDeliveryTest {
         repository.current = change.apply(repository.current);
     }
 
+    /** Task 0110: the stub by its name, which the connection allows (a written address is never allowed). */
+    private static String local(String address) {
+        return address.replace("127.0.0.1", "localhost");
+    }
+
     private static IntegrationConnection withEndpoint(IntegrationConnection c, String endpoint) {
         DestinationSettings d = c.destination();
         return c.withDestination(null).updateConfiguration(c.name(), null, c.purpose(), c.direction(), c.providerType(), c.authenticationType(), null,
-                endpoint, null, null, true, null, null, null, null, null, null, null, null, null, null, null, null, Instant.now()).withDestination(d);
+                endpoint, null, null, true, null, null, null, null, null, null, null, null, null, null, null, null, Instant.now()).withDestination(d)
+                .withAllowedHosts(c.allowedHosts());
     }
 
     static final class OneConnection implements IntegrationConnectionRepository {

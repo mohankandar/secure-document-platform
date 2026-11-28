@@ -126,7 +126,8 @@ public class IntegrationConnectionController {
                 parseOptional(body.pollingScheduleType(), IntegrationPollingScheduleType.class), body.pollingIntervalMinutes(), parseLocalTime(body.pollingLocalTime()),
                 body.pollingTimeZone(), body.pollingBatchLimit(),
                 parse(body.acknowledgementMode(), IntegrationAcknowledgementMode.class, "acknowledgement mode"),
-                Boolean.TRUE.equals(body.enabled()), body.destination());
+                Boolean.TRUE.equals(body.enabled()), body.destination(),
+                body.allowedHosts() == null ? null : new java.util.LinkedHashSet<>(body.allowedHosts()));
     }
 
     private <E extends Enum<E>> E parse(String raw, Class<E> type, String label) {
@@ -169,6 +170,7 @@ public class IntegrationConnectionController {
                 connection.pollingLocalTime() == null ? null : connection.pollingLocalTime().toString(), connection.pollingTimeZone(), connection.pollingBatchLimit(),
                 connection.acknowledgementMode().name(), connection.enabled(), connection.configurationVersion(),
                 connection.healthStatus().name(), connection.lastSuccessAt(), connection.lastFailureAt(),
-                connection.lastFailureCategory(), connection.createdAt(), connection.updatedAt(), connection.destination());
+                connection.lastFailureCategory(), connection.createdAt(), connection.updatedAt(), connection.destination(),
+                new java.util.TreeSet<>(connection.allowedHosts()));
     }
 }

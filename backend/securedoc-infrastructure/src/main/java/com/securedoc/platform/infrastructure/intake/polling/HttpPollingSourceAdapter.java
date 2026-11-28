@@ -167,9 +167,18 @@ public class HttpPollingSourceAdapter implements PollingSourcePort {
             if (!("http".equalsIgnoreCase(base.getScheme()) || "https".equalsIgnoreCase(base.getScheme()))) {
                 throw new IllegalArgumentException("Polling endpoint must use HTTP or HTTPS");
             }
+            // Hardening (task 0110): outbound addresses limited, checked again after the name is resolved.
+            com.securedoc.platform.application.integration.OutboundAddressRule.check(c.endpoint(), c.allowedHosts())
+                    .ifPresent(refusal -> { throw new AddressRefused(); });
             String baseText = c.endpoint().endsWith("/") ? c.endpoint().substring(0, c.endpoint().length()-1) : c.endpoint();
             return URI.create(baseText + relativePath);
+        } catch (AddressRefused refused) {
+            throw technical("POLL_CONFIGURATION_ERROR", "Polling endpoint is not allowed", null);
         } catch (RuntimeException e) { throw technical("POLL_CONFIGURATION_ERROR", "Polling endpoint is invalid", e); }
+    }
+
+    private static final class AddressRefused extends RuntimeException {
+        AddressRefused() { super(null, null, false, false); }
     }
 
     private <T> HttpResponse<T> send(HttpRequest req, HttpResponse.BodyHandler<T> handler, IntegrationConnection connection) {
