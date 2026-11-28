@@ -65,6 +65,20 @@ jobs:
         env:
           PLATFORM_CORE_READ_TOKEN: ${{ secrets.PLATFORM_CORE_READ_TOKEN }}
         run: mvn -B verify
+      # Task 0118: every migration on a fresh database, then every table and column must have a comment and the
+      # committed docs/data must match the live schema (DataDictionaryPostgresTest in the verify above checks the same).
+      - name: Data dictionary is complete and up to date
+        run: |
+          jar=backend/securedoc-api/target/securedoc-api-0.1.0-SNAPSHOT.jar
+          PGPASSWORD="$LEXAVAULT_TEST_PG_PASSWORD" psql -h localhost -U lvtest -d postgres -qc 'create database lv_dictionary'
+          export LEXAVAULT_SCHEMA_DB_URL=jdbc:postgresql://localhost:5432/lv_dictionary
+          export LEXAVAULT_SCHEMA_DB_USER="$LEXAVAULT_TEST_PG_USER" LEXAVAULT_SCHEMA_DB_PASSWORD="$LEXAVAULT_TEST_PG_PASSWORD"
+          launch() { java -cp "$jar" -Dloader.main="$1" org.springframework.boot.loader.launch.PropertiesLauncher "${@:2}"; }
+          launch com.securedoc.install.SchemaStep apply > /dev/null
+          if ! launch com.securedoc.install.DataDictionary check docs/data; then
+            echo "::error::The data dictionary is incomplete or out of date: add the missing comments, run scripts/Update-LexaVault-DataDictionary.ps1 (or .sh) and commit docs/data."
+            exit 1
+          fi
 
   frontend:
     runs-on: ubuntu-24.04

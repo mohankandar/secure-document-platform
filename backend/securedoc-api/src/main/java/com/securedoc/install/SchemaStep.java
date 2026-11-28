@@ -52,6 +52,7 @@ public final class SchemaStep {
 
     static final String CHANGELOG = "classpath:db/changelog/db.changelog-master.xml";
     static final String ENV_PREFIX = "LEXAVAULT_SCHEMA";
+    static final String PLATFORM_COMMENTS = "db/comments/platform-tables.sql";
 
     /** One platform Flyway run: its location, its history table and its version table. */
     record PlatformRun(String name, String location, String historyTable, String versionTable, String tablePrefix) {
@@ -140,9 +141,41 @@ public final class SchemaStep {
         for (PlatformRun run : PLATFORM_RUNS) {
             if (run != FIELDS_RUN) migrate(db, run);
         }
+        platformComments(db);
         if (runtimeUser != null) grantRuntimeUser(db, runtimeUser);
         out.println("Schema step done.");
         return 0;
+    }
+
+    /**
+     * Task 0118: the meaning of every platform-core table and column ({@value #PLATFORM_COMMENTS}, one COMMENT statement
+     * per line). They run after the platform runs, which create those tables, on every apply: a comment is only text,
+     * and setting it again changes nothing else. The app's own tables get theirs from the changelog.
+     */
+    private void platformComments(InstallDb db) {
+        List<String> statements = platformCommentStatements();
+        try (Connection c = db.open(); Statement s = c.createStatement()) {
+            c.setAutoCommit(false);
+            for (String sql : statements) s.execute(sql);
+            c.commit();
+        } catch (SQLException e) {
+            throw new InstallException(1, "SCHEMA_STEP_FAILED", "platform comments (" + PLATFORM_COMMENTS + "): SQL state "
+                    + e.getSQLState());
+        }
+        out.println("  " + pad("comments") + " " + statements.size() + " platform-core comment(s) set");
+    }
+
+    static List<String> platformCommentStatements() {
+        List<String> statements = new ArrayList<>();
+        for (String line : DataDictionary.resource(PLATFORM_COMMENTS).split("\n")) {
+            String sql = line.strip();
+            if (sql.isEmpty() || sql.startsWith("--")) continue;
+            if (!sql.startsWith("COMMENT ON ") || !sql.endsWith(";")) {
+                throw new InstallException(1, "SCHEMA_STEP_FAILED", PLATFORM_COMMENTS + " holds a line that is not one COMMENT statement");
+            }
+            statements.add(sql.substring(0, sql.length() - 1));
+        }
+        return statements;
     }
 
     private void migrate(InstallDb db, PlatformRun run) {
