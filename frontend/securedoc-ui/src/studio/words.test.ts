@@ -314,3 +314,16 @@ test('task 0099: a page the final check held says so, with its kinds; the second
   assert.equal(isFinalCheck(['FINAL', 'PIN']), true);
   assert.equal(isFinalCheck(['PIN']), false);
 });
+
+test('task 0119: a page the final check could not read says so, not that something is still readable', async () => {
+  const { secondCheckBanner, finalCheckReason, finalCheckWhy, FINAL_CHECK_WORDS } = await import('./words.ts');
+  assert.equal(secondCheckBanner(['FINAL', 'UNREAD'], 5), 'The final check could not read page 5');
+  assert.equal(finalCheckReason(['FINAL', 'UNREAD']), 'UNREAD');
+  assert.match(finalCheckWhy(['FINAL', 'UNREAD']), /could not read this page \(handwriting or a poor scan\)\. Please confirm it is clean\./);
+  // A value found and the page unread: a value is still readable.
+  assert.equal(finalCheckReason(['FINAL', 'DOB', 'UNREAD']), 'FOUND');
+  assert.equal(secondCheckBanner(['FINAL', 'DOB', 'UNREAD'], 5), 'Still readable in the finished file on page 5: date of birth');
+  assert.equal(finalCheckWhy(['FINAL', 'CARD']), FINAL_CHECK_WORDS.why);
+  assert.equal(finalCheckReason(['SSN']), null);
+  assert.equal(finalCheckReason(null), null);
+});

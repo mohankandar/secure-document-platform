@@ -369,6 +369,10 @@ public final class TriggerPackageProcessingService implements TriggerPackageProc
             if (detection.resultingStatus() == DocumentStatus.REDACTING
                     && detection.overallDecision() != PolicyDecision.REVIEW) {
                 attemptRedactionById(workItem.documentId(), workItem.packageId(), workItem.tenantId(), correlationId);
+            } else if (detection.resultingStatus() == DocumentStatus.REDACTING) {
+                // Task 0119: one review stop per case: the final check's findings join this review.
+                redactDocumentUseCase.checkBeforeReview(RedactDocumentCommand.of(
+                        workItem.documentId(), workItem.packageId(), workItem.tenantId(), correlationId));
             }
             // REVIEW intentionally remains REDACTING until only confirmed/dismissed findings remain.
         } catch (Exception e) {

@@ -129,16 +129,44 @@ public final class SecondCheck {
      */
     public Result run(TenantId tenantId, DocumentId documentId, TenantRedactionPolicy policy, Finished finished,
                       List<RedactionTarget> targets, List<Finding> dismissed, List<String> keptByPerson) {
-        long started = System.nanoTime();
-        List<TextExtractionPort.PageText> pages;
-        try (InputStream in = finished.open()) {
-            pages = extraction.extractReadable(in, "application/pdf", null).pages();
-        } catch (IOException e) {
-            throw new IllegalStateException("The finished file could not be read for the second check");
-        }
         Set<Integer> checkedByAPerson = dismissed.stream()
                 .filter(f -> f.entityType() == EntityType.UNREAD_PAGE && !f.location().hasBoundingBox())
                 .map(f -> f.location().pageNumber()).collect(Collectors.toSet());
+        return run(tenantId, documentId, policy, finished, targets, dismissed, keptByPerson, checkedByAPerson, null);
+    }
+
+    /**
+     * Task 0119: the pages a person finished in this case are not read again; {@code readings} are the vision readings
+     * of this file shared with the final check (null: none shared), so a picture page is read once.
+     */
+    public Result run(TenantId tenantId, DocumentId documentId, TenantRedactionPolicy policy, Finished finished,
+                      List<RedactionTarget> targets, List<Finding> dismissed, List<String> keptByPerson,
+                      Set<Integer> checkedByAPerson, Map<Integer, VisionPageResult> readings) {
+        long started = System.nanoTime();
+        List<TextExtractionPort.PageText> pages;
+        int finishedByAPerson = 0;
+        try (InputStream in = finished.open()) {
+            if (checkedByAPerson.isEmpty()) {
+                pages = extraction.extractReadable(in, "application/pdf", null).pages();
+            } else {
+                // Task 0119: no OCR of the pages a person finished.
+                Set<Integer> notChecked = new java.util.TreeSet<>();
+                for (TextExtractionPort.PageText page : extraction.extractTextLayer(in, "application/pdf").pages()) {
+                    if (checkedByAPerson.contains(page.pageNumber())) finishedByAPerson++;
+                    else notChecked.add(page.pageNumber());
+                }
+                if (notChecked.isEmpty()) {
+                    pages = List.of();
+                } else {
+                    try (InputStream again = finished.open()) {
+                        pages = extraction.extractReadable(again, "application/pdf", notChecked).pages();
+                    }
+                }
+            }
+        } catch (IOException e) {
+            throw new IllegalStateException("The finished file could not be read for the second check");
+        }
+        VisionModelPort visionModel = sharing(this.visionModel, readings);
         Set<String> kept = keptByPerson.stream().map(RedactedValues::comparable)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
         Set<Integer> redacted = targets.stream().map(RedactionTarget::pageNumber).collect(Collectors.toSet());
@@ -146,7 +174,7 @@ public final class SecondCheck {
         Set<AiModel> models = new LinkedHashSet<>();
         Map<Integer, Set<String>> hits = new TreeMap<>();
         int checked = 0;
-        int skipped = 0;
+        int skipped = finishedByAPerson;
         for (TextExtractionPort.PageText page : pages) {
             if (checkedByAPerson.contains(page.pageNumber())) {
                 skipped++;
@@ -157,7 +185,8 @@ public final class SecondCheck {
             boolean byImage = policy.vision().enabled() && (redacted.contains(page.pageNumber())
                     || page.source() == TextExtractionPort.ExtractionSource.OCR
                     || page.text().strip().length() < LITTLE_TEXT);
-            if (byImage) found.addAll(readImage(page, policy, finished, targets, dismissed, models));
+            if (byImage) found.addAll(readImage(images, visionModel, page.pageNumber(), page.text(), policy, finished,
+                    targets, dismissed, models));
             if (!found.isEmpty()) hits.put(page.pageNumber(), found);
         }
         List<AiModel> tookPart = List.copyOf(models);
@@ -169,6 +198,21 @@ public final class SecondCheck {
         log.info("SECOND_CHECK_COMPLETED document={} pages={} skipped={} pagesToCheck={} durationMs={}", documentId,
                 checked, skipped, toCheck.size(), (System.nanoTime() - started) / 1_000_000L);
         return new Result(checked, skipped, List.copyOf(toCheck), models);
+    }
+
+    /**
+     * Task 0119: the model, asked once per page of one file: a page another check of the same file already read is
+     * answered from {@code readings}. Only a page that was read is kept. Null readings: the model itself.
+     */
+    static VisionModelPort sharing(VisionModelPort model, Map<Integer, VisionPageResult> readings) {
+        if (readings == null) return model;
+        return (image, page) -> {
+            VisionPageResult had = readings.get(page);
+            if (had != null) return had;
+            VisionPageResult result = model.read(image, page);
+            if (result.read()) readings.put(page, result);
+            return result;
+        };
     }
 
     private Set<String> readText(TenantId tenantId, TextExtractionPort.PageText page, TenantRedactionPolicy policy,
@@ -196,11 +240,6 @@ public final class SecondCheck {
         return found;
     }
 
-    private Set<String> readImage(TextExtractionPort.PageText page, TenantRedactionPolicy policy, Finished finished,
-                                  List<RedactionTarget> targets, List<Finding> dismissed, Set<AiModel> models) {
-        return readImage(images, visionModel, page.pageNumber(), page.text(), policy, finished, targets, dismissed,
-                models);
-    }
 
     /** The short name a page of the final check gets when the vision model's answer can't be used. */
     static final String UNREAD_CODE = UNREAD;
