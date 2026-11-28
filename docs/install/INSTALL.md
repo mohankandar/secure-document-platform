@@ -7,6 +7,8 @@ machine, so if a step here is wrong, the proof fails.
 ## What you need
 
 - Java 21 (`java` and `jar`), and PostgreSQL 16 with its command-line tools (`psql`, `pg_dump`, `pg_restore`).
+- Tesseract OCR 5 with its English language data, on the PATH (`tesseract`): LexaVault reads scanned pages with it and
+  adds the searchable text to redacted pages. Without it a document stops (LV-PRC-005).
 - The package: `lexavault.jar`, `lexavault-setup.jar`, `lexavault-scan-bridge.jar`, `ui/` (the screens), `install/`, `docs/`
   and `VERSION`.
 - Your licence, your sign-in file and your role mapping (`SETUP.md`). A development package also holds the demo files

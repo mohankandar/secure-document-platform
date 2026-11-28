@@ -125,6 +125,16 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22'
+      # The install guide's "What you need": Tesseract OCR.
+      - name: Tesseract OCR (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -q && sudo apt-get install -y -q tesseract-ocr
+      - name: Tesseract OCR (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install tesseract -y --no-progress
+          "C:Program FilesTesseract-OCR" | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
       # The runner images carry PostgreSQL as the operating system's own package or installer.
       - name: PostgreSQL (Linux)
         if: runner.os == 'Linux'
