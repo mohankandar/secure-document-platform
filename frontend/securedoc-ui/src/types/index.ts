@@ -656,6 +656,8 @@ export interface IntegrationConnection {
   authenticationType: IntegrationAuthenticationType;
   clientPrincipal?: string | null;
   endpoint?: string | null;
+  /** Task 0110: host names allowed to be internal or plain http. Absent from an older server: none. */
+  allowedHosts?: string[];
   fileShareRoot?: string | null;
   secretConfigured: boolean;
   timeoutSeconds: number;
@@ -726,6 +728,8 @@ export interface IntegrationConnectionRequest {
   authenticationType: IntegrationAuthenticationType;
   clientPrincipal?: string;
   endpoint?: string;
+  /** Task 0110: host names allowed to be internal or plain http; absent keeps the stored ones. */
+  allowedHosts?: string[];
   fileShareRoot?: string;
   secretReference?: string;
   clearSecretReference?: boolean;

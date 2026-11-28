@@ -31,22 +31,35 @@ public class HttpPollingSourceAdapter implements PollingSourcePort {
     private final ObjectMapper mapper;
     private final Path stagingRoot;
     private final IntegrationSecrets secrets;
+    /** Hardening (task 0110): the largest polling answer read (a list of cases or a receipt); PDFs have their own limit. */
+    static final int DEFAULT_MAX_ANSWER_BYTES = 20 * 1024 * 1024;
+    private final int maxAnswerBytes;
 
     @org.springframework.beans.factory.annotation.Autowired
-    public HttpPollingSourceAdapter(ObjectMapper mapper, IntegrationSecrets secrets) {
+    public HttpPollingSourceAdapter(ObjectMapper mapper, IntegrationSecrets secrets,
+                                    @org.springframework.beans.factory.annotation.Value(
+                                            "${lexavault.polling.max-answer-bytes:" + DEFAULT_MAX_ANSWER_BYTES + "}")
+                                    int maxAnswerBytes) {
         this(HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NEVER).build(), mapper,
-                Path.of(System.getProperty("java.io.tmpdir"), "lexavault-polling-staging"), secrets);
+                Path.of(System.getProperty("java.io.tmpdir"), "lexavault-polling-staging"), secrets, maxAnswerBytes);
     }
 
     HttpPollingSourceAdapter(HttpClient client, ObjectMapper mapper, Path stagingRoot, IntegrationSecrets secrets) {
+        this(client, mapper, stagingRoot, secrets, DEFAULT_MAX_ANSWER_BYTES);
+    }
+
+    HttpPollingSourceAdapter(HttpClient client, ObjectMapper mapper, Path stagingRoot, IntegrationSecrets secrets,
+                             int maxAnswerBytes) {
+        if (maxAnswerBytes < 1) throw new IllegalArgumentException("lexavault.polling.max-answer-bytes must be positive");
         this.client = client; this.mapper = mapper; this.stagingRoot = stagingRoot; this.secrets = Objects.requireNonNull(secrets);
+        this.maxAnswerBytes = maxAnswerBytes;
     }
 
     @Override
     public List<PollingSourcePackage> discoverAvailable(IntegrationConnection connection, int limit) {
         URI uri = resolve(connection, CONTRACT_ROOT + "?limit=" + Math.max(1, Math.min(limit, 1000)));
         HttpRequest request = authorized(connection, HttpRequest.newBuilder(uri).GET()).timeout(Duration.ofSeconds(connection.timeoutSeconds())).build();
-        HttpResponse<String> response = send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8), connection);
+        Answer response = answer(request, connection);
         require2xx(response.statusCode(), "POLL_DISCOVERY_FAILED");
         try {
             DiscoveryEnvelope envelope = mapper.readValue(response.body(), DiscoveryEnvelope.class);
@@ -107,7 +120,7 @@ public class HttpPollingSourceAdapter implements PollingSourcePort {
         HttpRequest request = authorized(connection, HttpRequest.newBuilder(resolve(connection, path)))
                 .timeout(Duration.ofSeconds(connection.timeoutSeconds())).header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8)).build();
-        HttpResponse<String> response = send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8), connection);
+        Answer response = answer(request, connection);
         require2xx(response.statusCode(), "SOURCE_ACKNOWLEDGEMENT_FAILED");
         if (response.body() == null || response.body().isBlank()) return null;
         try {
@@ -154,15 +167,40 @@ public class HttpPollingSourceAdapter implements PollingSourcePort {
             if (!("http".equalsIgnoreCase(base.getScheme()) || "https".equalsIgnoreCase(base.getScheme()))) {
                 throw new IllegalArgumentException("Polling endpoint must use HTTP or HTTPS");
             }
+            // Hardening (task 0110): outbound addresses limited, checked again after the name is resolved.
+            com.securedoc.platform.application.integration.OutboundAddressRule.check(c.endpoint(), c.allowedHosts())
+                    .ifPresent(refusal -> { throw new AddressRefused(); });
             String baseText = c.endpoint().endsWith("/") ? c.endpoint().substring(0, c.endpoint().length()-1) : c.endpoint();
             return URI.create(baseText + relativePath);
+        } catch (AddressRefused refused) {
+            throw technical("POLL_CONFIGURATION_ERROR", "Polling endpoint is not allowed", null);
         } catch (RuntimeException e) { throw technical("POLL_CONFIGURATION_ERROR", "Polling endpoint is invalid", e); }
+    }
+
+    private static final class AddressRefused extends RuntimeException {
+        AddressRefused() { super(null, null, false, false); }
     }
 
     private <T> HttpResponse<T> send(HttpRequest req, HttpResponse.BodyHandler<T> handler, IntegrationConnection connection) {
         try { return client.send(req, handler); }
         catch (InterruptedException e) { Thread.currentThread().interrupt(); throw technical("POLL_INTERRUPTED", "Polling request was interrupted", e); }
         catch (IOException e) { throw technical("POLL_SOURCE_UNAVAILABLE", "Polling source is unavailable", e); }
+    }
+    private record Answer(int statusCode, String body) {}
+
+    /** Hardening (task 0110): the answer is read up to the limit; a larger one is refused (LV-INT-045) and not kept. */
+    private Answer answer(HttpRequest request, IntegrationConnection connection) {
+        HttpResponse<InputStream> response = send(request, HttpResponse.BodyHandlers.ofInputStream(), connection);
+        byte[] bytes;
+        try (InputStream in = response.body()) {
+            bytes = in.readNBytes(maxAnswerBytes + 1);
+        } catch (IOException e) {
+            throw technical("POLL_SOURCE_UNAVAILABLE", "Polling source is unavailable", e);
+        }
+        if (bytes.length > maxAnswerBytes) {
+            throw technical("POLL_RESPONSE_TOO_LARGE", "Polling source answer exceeds the configured size limit", null);
+        }
+        return new Answer(response.statusCode(), new String(bytes, StandardCharsets.UTF_8));
     }
     private void require2xx(int status, String category) { if (status < 200 || status >= 300) throw technical(category, "Polling source returned HTTP " + status, null); }
     private RuntimeException technical(String category, String detail, Throwable cause) {

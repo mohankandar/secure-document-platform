@@ -119,6 +119,43 @@ class IntegrationConnectionServiceTest {
         assertThrows(ValidationException.class, () -> service.draft(tenantA, null, input("Draft", 51, 500)));
     }
 
+    /** Hardening: outbound addresses limited, checked on save; an internal host only by name in the allowed hosts. */
+    @Test
+    void anInternalOrPlainHttpAddressIsSavedOnlyWithItsHostNameAllowed() {
+        for (String address : List.of("http://169.254.169.254/latest", "http://localhost:8080", "https://127.0.0.1",
+                "http://source.example.test")) {
+            var refused = assertThrows(ValidationException.class,
+                    () -> service.create(tenantA, actor, correlation, polling("Source", address, null)), address);
+            assertEquals(com.securedoc.platform.domain.error.LvErrorCode.CFG_003, refused.lvCode());
+            assertTrue(refused.getMessage().startsWith("endpoint: "), refused.getMessage());
+            assertFalse(refused.getMessage().contains("169.254") || refused.getMessage().contains("localhost"),
+                    "the message names the field, not the address");
+        }
+        assertTrue(repository.findByTenantId(tenantA).isEmpty());
+
+        var allowed = service.create(tenantA, actor, correlation,
+                polling("Source", "http://localhost:8080", Set.of(" LocalHost ")));
+        assertEquals(Set.of("localhost"), allowed.allowedHosts());
+        assertEquals(Set.of("localhost"), service.update(tenantA, allowed.id(), actor, correlation,
+                polling("Source", "http://localhost:9090", null)).allowedHosts(), "null keeps the stored hosts");
+        assertThrows(ValidationException.class, () -> service.update(tenantA, allowed.id(), actor, correlation,
+                polling("Source", "http://localhost:9090", Set.of())), "emptied: refused again");
+
+        for (Set<String> bad : List.of(Set.of("127.0.0.1"), Set.of("http://host"), Set.of("host:80"), Set.of("host/x"))) {
+            var refused = assertThrows(ValidationException.class,
+                    () -> service.create(tenantA, actor, correlation, polling("Other", "https://example.test", bad)));
+            assertTrue(refused.getMessage().startsWith("allowedHosts: "), refused.getMessage());
+        }
+    }
+
+    private IntegrationConnectionService.ConnectionInput polling(String name, String endpoint, Set<String> allowedHosts) {
+        return new IntegrationConnectionService.ConnectionInput(name, null, IntegrationPurpose.INGESTION_SOURCE,
+                IntegrationDirection.OUTBOUND, IntegrationProviderType.HTTP_API, IntegrationAuthenticationType.NONE, null,
+                endpoint, null, null, false, 60, 2, 24, 50, 262144000L, 500,
+                com.securedoc.platform.domain.integration.IntegrationPollingScheduleType.INTERVAL, 15, null, null, 100,
+                IntegrationAcknowledgementMode.SOURCE_PICKUP_ACK, false, null, allowedHosts);
+    }
+
     private IntegrationConnectionService.ConnectionInput input(String name) {
         return input(name, 50, 500);
     }

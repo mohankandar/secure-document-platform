@@ -192,6 +192,11 @@ public final class DestinationProfiles implements DestinationProfilePort {
         Map<String, String> mapping = mapping(p, d, holds, keys);
         Set<String> sensitive = new LinkedHashSet<>(d.sensitiveFields());
         sensitive.retainAll(mapping.values());
+        // Hardening (task 0110): outbound addresses limited, checked again after the name is resolved.
+        if (com.securedoc.platform.application.integration.OutboundAddressRule.check(c.endpoint(), c.allowedHosts())
+                .isPresent()) {
+            throw new NotUsable(IntegrationCode.INT_CONFIG_INVALID.name(), "The destination's address is not allowed");
+        }
         IntegrationConfig made;
         try {
             made = p.complete(new IntegrationProfile.Completion(c.tenantId().value(), PRODUCT, c.name(),

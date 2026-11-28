@@ -89,7 +89,7 @@ public final class IntegrationConnectionService {
 
     public IntegrationConnection create(TenantId tenantId, ActorId actorId, CorrelationId correlationId,
                                         ConnectionInput input) {
-        IntegrationConnection connection = prepareCreate(tenantId, input);
+        IntegrationConnection connection = prepareCreate(tenantId, input, true);
         repository.save(connection);
         auditService.recordSuccess(tenantId, actorId, AuditAction.INTEGRATION_CONNECTION_CREATED,
                 "IntegrationConnection", connection.id().toString(), correlationId,
@@ -99,7 +99,7 @@ public final class IntegrationConnectionService {
 
     public IntegrationConnection update(TenantId tenantId, IntegrationConnectionId id,
                                         ActorId actorId, CorrelationId correlationId, ConnectionInput input) {
-        IntegrationConnection updated = prepareUpdate(tenantId, id, input);
+        IntegrationConnection updated = prepareUpdate(tenantId, id, input, true);
         repository.save(updated);
         auditService.recordSuccess(tenantId, actorId, AuditAction.INTEGRATION_CONNECTION_UPDATED,
                 "IntegrationConnection", updated.id().toString(), correlationId,
@@ -113,17 +113,19 @@ public final class IntegrationConnectionService {
      * {@link NotFoundException} is thrown, so another entity's stored key is never reached.
      */
     public IntegrationConnection draft(TenantId tenantId, IntegrationConnectionId idOrNull, ConnectionInput input) {
-        return idOrNull == null ? prepareCreate(tenantId, input) : prepareUpdate(tenantId, idOrNull, input);
+        // Task 0110: the address rule is applied by the test itself, so a refused address is a failed test.
+        return idOrNull == null ? prepareCreate(tenantId, input, false) : prepareUpdate(tenantId, idOrNull, input, false);
     }
 
-    private IntegrationConnection prepareCreate(TenantId tenantId, ConnectionInput input) {
+    private IntegrationConnection prepareCreate(TenantId tenantId, ConnectionInput input, boolean checkAddress) {
         Objects.requireNonNull(input, "Integration connection input is required");
         ensureUniqueName(tenantId, input.name(), null);
         ensureUniqueClientPrincipal(tenantId, input, null);
         ensureSingleEnabledDocumentStore(tenantId, input.purpose(), input.enabled(), null);
         requireZone(tenantId, input);
+        IntegrationConnection made;
         try {
-            return checkedDestination(IntegrationConnection.create(tenantId, input.name(), input.description(), input.purpose(),
+            made = checkedDestination(IntegrationConnection.create(tenantId, input.name(), input.description(), input.purpose(),
                     input.direction(), input.providerType(), input.authenticationType(), input.clientPrincipal(), input.endpoint(),
                     input.fileShareRoot(), input.secretReference(), input.timeoutSeconds(), input.retryMaxAttempts(), input.incompleteWindowHours(), input.maxDocumentsPerIntake(), input.maxPdfSizeBytes(), input.maxPdfPages(),
                     input.pollingScheduleType(), input.pollingIntervalMinutes(), input.pollingLocalTime(), input.pollingTimeZone(), input.pollingBatchLimit(),
@@ -131,15 +133,11 @@ public final class IntegrationConnectionService {
         } catch (IllegalArgumentException e) {
             throw new ValidationException(LvErrorCode.CFG_001, e.getMessage());
         }
+        return addressChecked(checkAddress, made.withAllowedHosts(allowedHosts(input.allowedHosts(), java.util.Set.of())));
     }
 
-    private IntegrationConnection prepareUpdate(TenantId tenantId, IntegrationConnectionId id, ConnectionInput input) {
-        Objects.requireNonNull(input, "Integration connection input is required");
-        IntegrationConnection existing = get(tenantId, id);
-        ensureUniqueName(tenantId, input.name(), id);
-        ensureUniqueClientPrincipal(tenantId, input, id);
-        ensureSingleEnabledDocumentStore(tenantId, input.purpose(), existing.enabled(), id);
-        requireZone(tenantId, input);
+    private IntegrationConnection prepareUpdateBody(TenantId tenantId, IntegrationConnectionId id, ConnectionInput input,
+                                                    IntegrationConnection existing) {
         try {
             // A caller that knows nothing of destinations (the old screen) keeps what is stored.
             return checkedDestination(existing.withDestination(null).updateConfiguration(input.name(), input.description(), input.purpose(), input.direction(),
@@ -152,6 +150,51 @@ public final class IntegrationConnectionService {
         } catch (IllegalArgumentException e) {
             throw new ValidationException(LvErrorCode.CFG_001, e.getMessage());
         }
+    }
+
+    private IntegrationConnection prepareUpdate(TenantId tenantId, IntegrationConnectionId id, ConnectionInput input,
+                                                boolean checkAddress) {
+        Objects.requireNonNull(input, "Integration connection input is required");
+        IntegrationConnection existing = get(tenantId, id);
+        ensureUniqueName(tenantId, input.name(), id);
+        ensureUniqueClientPrincipal(tenantId, input, id);
+        ensureSingleEnabledDocumentStore(tenantId, input.purpose(), existing.enabled(), id);
+        requireZone(tenantId, input);
+        IntegrationConnection updated = prepareUpdateBody(tenantId, id, input, existing);
+        return addressChecked(checkAddress, updated.withAllowedHosts(allowedHosts(input.allowedHosts(), existing.allowedHosts())));
+    }
+
+    /** Task 0110: host names only, never a written address, a scheme, a port or a path. Null keeps {@code stored}. */
+    private static java.util.Set<String> allowedHosts(java.util.Set<String> given, java.util.Set<String> stored) {
+        if (given == null) return stored;
+        java.util.Set<String> hosts = new java.util.TreeSet<>();
+        for (String host : given) {
+            if (host == null || host.isBlank()) continue;
+            String name = host.trim().toLowerCase(java.util.Locale.ROOT);
+            if (name.length() > 253 || !name.matches("[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*")
+                    || name.matches("[0-9.]+")) {
+                throw new ValidationException(LvErrorCode.CFG_003,
+                        "allowedHosts: a host name only (no address, port or path)");
+            }
+            hosts.add(name);
+        }
+        if (hosts.size() > 20) throw new ValidationException(LvErrorCode.CFG_003, "allowedHosts: at most 20 host names");
+        return hosts;
+    }
+
+    /**
+     * Task 0110 (hardening: outbound addresses limited): a connection's address must be https and public, unless its
+     * host is named in the connection's allowed hosts. Checked on save; the connections check it again when they
+     * connect.
+     */
+    private static IntegrationConnection addressChecked(boolean check, IntegrationConnection connection) {
+        if (!check || connection.endpoint() == null || connection.endpoint().isBlank()) return connection;
+        // A name that does not resolve yet may be saved (set up before its address exists); it is refused when used.
+        OutboundAddressRule.check(connection.endpoint(), connection.allowedHosts())
+                .filter(refusal -> refusal != OutboundAddressRule.Refusal.NOT_RESOLVED).ifPresent(refusal -> {
+            throw new ValidationException(LvErrorCode.CFG_003, "endpoint: " + OutboundAddressRule.message(refusal));
+        });
+        return connection;
     }
 
     public IntegrationConnection setEnabled(TenantId tenantId, IntegrationConnectionId id, boolean enabled,
@@ -283,7 +326,24 @@ public final class IntegrationConnectionService {
             IntegrationAcknowledgementMode acknowledgementMode,
             boolean enabled,
             /* Task 0087: null for every connection but a document store's. */
-            com.securedoc.platform.domain.integration.DestinationSettings destination) {
+            com.securedoc.platform.domain.integration.DestinationSettings destination,
+            /* Task 0110: host names allowed to be internal or plain http; null keeps the stored ones. */
+            java.util.Set<String> allowedHosts) {
+
+        public ConnectionInput(String name, String description, IntegrationPurpose purpose, IntegrationDirection direction,
+                               IntegrationProviderType providerType, IntegrationAuthenticationType authenticationType,
+                               String clientPrincipal, String endpoint, String fileShareRoot, String secretReference,
+                               boolean preserveSecretReference, Integer timeoutSeconds, Integer retryMaxAttempts,
+                               Integer incompleteWindowHours, Integer maxDocumentsPerIntake, Long maxPdfSizeBytes,
+                               Integer maxPdfPages, IntegrationPollingScheduleType pollingScheduleType,
+                               Integer pollingIntervalMinutes, LocalTime pollingLocalTime, String pollingTimeZone,
+                               Integer pollingBatchLimit, IntegrationAcknowledgementMode acknowledgementMode, boolean enabled,
+                               com.securedoc.platform.domain.integration.DestinationSettings destination) {
+            this(name, description, purpose, direction, providerType, authenticationType, clientPrincipal, endpoint, fileShareRoot,
+                    secretReference, preserveSecretReference, timeoutSeconds, retryMaxAttempts, incompleteWindowHours,
+                    maxDocumentsPerIntake, maxPdfSizeBytes, maxPdfPages, pollingScheduleType, pollingIntervalMinutes, pollingLocalTime,
+                    pollingTimeZone, pollingBatchLimit, acknowledgementMode, enabled, destination, null);
+        }
 
         public ConnectionInput(String name, String description, IntegrationPurpose purpose, IntegrationDirection direction,
                                IntegrationProviderType providerType, IntegrationAuthenticationType authenticationType,

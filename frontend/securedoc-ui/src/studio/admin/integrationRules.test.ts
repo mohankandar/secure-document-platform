@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   DEFAULT_MAX_PDF_SIZE_BYTES, SOURCE_FILES_HINT, SOURCE_MAX_FILES, SOURCE_MAX_PAGES, SOURCE_PAGES_HINT, VIEWS, advancedSummary, capToCaseLimits, ago, folderCheckResult, attentionLine, attentionTitle, connectionStatus, connectionTag, draftTestResult, everyText, failureReason,
-  methodOf, pagesText, ruleSentence, slashParts, statusText, watchedFolderStatus,
+  hostList, methodOf, pagesText, ruleSentence, slashParts, statusText, watchedFolderStatus,
 } from './integrationRules.ts';
 
 const NOW = Date.parse('2026-11-18T12:00:00Z');
@@ -185,4 +185,10 @@ test('0039: a source saved before the cap reads as the cap; lower and missing va
   assert.deepEqual(capToCaseLimits({ maxDocumentsPerIntake: 1000, maxPdfPages: 2000 }), { maxDocumentsPerIntake: 50, maxPdfPages: 500 });
   assert.deepEqual(capToCaseLimits({ maxDocumentsPerIntake: 1, maxPdfPages: 120 }), { maxDocumentsPerIntake: 1, maxPdfPages: 120 });
   assert.deepEqual(capToCaseLimits({ maxDocumentsPerIntake: undefined, maxPdfPages: undefined }), { maxDocumentsPerIntake: undefined, maxPdfPages: undefined });
+});
+
+test('0110: the internal hosts allowed are names, as typed with commas or spaces, lower case and once each', () => {
+  assert.deepEqual(hostList(' Archive.corp.local, files.local  archive.corp.local;'), ['archive.corp.local', 'files.local']);
+  assert.deepEqual(hostList(''), []);
+  assert.deepEqual(hostList(undefined), []);
 });

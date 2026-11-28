@@ -15,9 +15,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.InetAddress;
 import java.net.URI;
-import java.net.UnknownHostException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -241,16 +239,7 @@ public final class OllamaVisionModelAdapter implements VisionModelPort {
 
     /** This machine or a private network: never an address on the internet. Asked each time (an address can change). */
     private boolean local() throws IOException {
-        if (host == null) return false;
-        try {
-            for (InetAddress address : InetAddress.getAllByName(host.replaceAll("[\\[\\]]", ""))) {
-                boolean uniqueLocal = address.getAddress().length == 16 && (address.getAddress()[0] & 0xfe) == 0xfc;
-                if (!address.isLoopbackAddress() && !address.isSiteLocalAddress() && !uniqueLocal) return false;
-            }
-            return true;
-        } catch (UnknownHostException unknown) {
-            throw new IOException("The vision server's address is not known");
-        }
+        return LocalModelServer.isLocal(host);
     }
 
     static String prompt() {

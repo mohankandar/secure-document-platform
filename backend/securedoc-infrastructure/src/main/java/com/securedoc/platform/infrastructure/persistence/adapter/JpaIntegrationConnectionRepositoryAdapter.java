@@ -91,6 +91,8 @@ public class JpaIntegrationConnectionRepositoryAdapter implements IntegrationCon
         entity.setAuthenticationType(connection.authenticationType().name());
         entity.setClientPrincipal(connection.clientPrincipal());
         entity.setEndpoint(connection.endpoint());
+        entity.setAllowedHosts(connection.allowedHosts().isEmpty() ? null
+                : String.join(",", new java.util.TreeSet<>(connection.allowedHosts())));
         entity.setFileShareRoot(connection.fileShareRoot());
         entity.setSecretReference(connection.secretReference());
         entity.setTimeoutSeconds(connection.timeoutSeconds());
@@ -132,6 +134,8 @@ public class JpaIntegrationConnectionRepositoryAdapter implements IntegrationCon
                 entity.getLastSuccessAt(), entity.getLastFailureAt(), entity.getLastFailureCategory(),
                 entity.getCreatedAt(), entity.getUpdatedAt(),
                 entity.getDestinationSettings() == null ? null
-                        : JSON.readValue(entity.getDestinationSettings(), com.securedoc.platform.domain.integration.DestinationSettings.class));
+                        : JSON.readValue(entity.getDestinationSettings(), com.securedoc.platform.domain.integration.DestinationSettings.class),
+                entity.getAllowedHosts() == null ? java.util.Set.of()
+                        : java.util.Set.of(entity.getAllowedHosts().split(",")));
     }
 }
