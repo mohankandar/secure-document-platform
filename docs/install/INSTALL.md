@@ -76,6 +76,7 @@ SECUREDOC_SECURITY_OIDC_ISSUER_URI=https://login.example/realms/yours   # your l
 SECUREDOC_SECURITY_OIDC_AUDIENCE=...                                    # the sign-in file's apiAudience
 SECUREDOC_SECURITY_OIDC_PROVIDER_ID=...                                 # the sign-in file's providerId
 SECUREDOC_STORAGE_LOCAL_ROOT_PATH=/var/lib/lexavault/storage            # where LexaVault keeps its work files
+PLATFORM_ERASELOG_LOCATION=/var/lib/lexavault-erase-log                 # outside the database and its backups (ERASE_LOG.md)
 java -jar lexavault.jar
 ```
 
