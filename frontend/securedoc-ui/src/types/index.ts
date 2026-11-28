@@ -94,6 +94,8 @@ export interface SensitiveDataPolicyConfiguration {
   secondCheckEnabled?: boolean;
   /** Task 0065: a document's people are looked for on every page. Absent from an older server: off. */
   documentContextEnabled?: boolean;
+  /** Task 0119: the final check reads picture pages no person looked at again (OCR and the vision model). Absent from an older server: on. */
+  finalCheckRereadEnabled?: boolean;
   /** Task 0062: regulation packs in force, and the kinds whose last four digits stay visible. */
   enabledPacks?: string[];
   keepLastFourKinds?: string[];

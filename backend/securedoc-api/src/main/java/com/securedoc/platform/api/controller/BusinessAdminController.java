@@ -132,7 +132,7 @@ public class BusinessAdminController {
                 body.enabledPacks() == null ? null : parsePacks(body.enabledPacks()),
                 body.keepLastFourKinds() == null ? null : parseTypes(body.keepLastFourKinds()),
                 body.visionEnabled(), body.visionOcrThreshold(), body.secondCheckEnabled(),
-                body.documentContextEnabled());
+                body.documentContextEnabled(), body.finalCheckRereadEnabled());
         return ResponseEntity.ok(toResponse(principal.tenantId(), service.getConfiguration(principal.tenantId())));
     }
 
@@ -229,7 +229,7 @@ public class BusinessAdminController {
                 // Task 0099: the locked items are on for every entity.
                 names(policy.packs()), names(policy.keepLastFour()), true,
                 policy.vision().enabled(), policy.vision().ocrThreshold(), policy.secondCheck(),
-                policy.documentContext());
+                policy.documentContext(), policy.finalCheckReread());
         var lifecycle = configuration.lifecyclePolicy();
         var lifecycleResponse = new BusinessAdminConfigurationResponse.LifecyclePolicyResponse(
                 lifecycle.originalRetentionHours(), lifecycle.redactedCacheHours(), lifecycle.neverExportedHoldHours(),

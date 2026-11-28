@@ -40,6 +40,8 @@ class OllamaVisionModelAdapterTest {
     private final List<String> asked = new CopyOnWriteArrayList<>();
     private final List<Integer> statuses = new ArrayList<>();
     private String answer = "{\"items\": []}";
+    /** Task 0119: answers given in turn before {@link #answer}. */
+    private final List<String> answers = new CopyOnWriteArrayList<>();
     private String doneReason = "stop";
 
     @BeforeEach
@@ -64,7 +66,7 @@ class OllamaVisionModelAdapterTest {
             asked.add(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
             int status = statuses.isEmpty() ? 200 : statuses.remove(0);
             send(exchange, status, "{\"done\":true,\"done_reason\":\"" + doneReason + "\",\"message\":{\"content\":"
-                    + quoted(answer) + "}}");
+                    + quoted(answers.isEmpty() ? answer : answers.remove(0)) + "}}");
         });
         server.start();
     }
@@ -167,6 +169,28 @@ class OllamaVisionModelAdapterTest {
         int port = server.getAddress().getPort();
         server.stop(0);
         assertNotRead(adapter("http://127.0.0.1:" + port).read(IMAGE, 1), "LV-AI-001", "NOT_AVAILABLE");
+    }
+
+    /** Task 0119: the owner's handwritten page 5, nothing left on it: the model answered in words, twice. */
+    @Test
+    void anAnswerInWordsIsAskedOnceMoreWithItsShapeAndOnlyThen() {
+        answers.add("There are none.");
+        answers.add("{\"items\": []}");
+        VisionPageResult result = adapter().read(IMAGE, 5);
+        assertTrue(result.read() && result.items().isEmpty() && !result.incomplete());
+        assertEquals(2, asked.size());
+        assertFalse(asked.get(0).contains("\"format\""), "the first asking is the benchmarked one");
+        assertTrue(asked.get(1).contains("\"format\"") && asked.get(1).contains("\"items\""));
+
+        asked.clear();
+        answer = "{\"items\": [{\"type\": \"SSN\", \"box\": [100, 200, 300, 220]}]}";
+        assertEquals(1, adapter().read(IMAGE, 5).items().size());
+        assertEquals(1, asked.size(), "a readable answer is never asked again");
+
+        asked.clear();
+        answer = "There are none.";
+        assertNotRead(adapter().read(IMAGE, 5), "LV-AI-005", "ANSWER_NOT_READABLE");
+        assertEquals(2, asked.size(), "asked once more only");
     }
 
     @Test

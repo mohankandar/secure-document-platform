@@ -5,7 +5,7 @@ import { Minus, MousePointerSquareDashed, Plus, X } from 'lucide-react';
 import { apiClient } from '../api/client';
 import type { FocusedReviewItem, FocusedReviewQueue, ReviewBoundingBox, ReviewFoundText } from '../types';
 import { CAP, caseTitle, errorMessage, usePackages, useReviewQueue } from './data';
-import { FINAL_CHECK_WORDS, NAV, REVIEW_WORDS, SECOND_CHECK_WORDS, UNREAD_PAGE, UNREAD_PAGE_WORDS, foundByText, isFinalCheck, secondCheckBanner, sensitiveTypeName, whyAsked } from './words';
+import { FINAL_CHECK_WORDS, NAV, REVIEW_WORDS, SECOND_CHECK_WORDS, UNREAD_PAGE, UNREAD_PAGE_WORDS, finalCheckReason, finalCheckWhy, foundByText, isFinalCheck, secondCheckBanner, sensitiveTypeName, whyAsked } from './words';
 import { PREVIEW_PIXELS_PER_CSS_PIXEL, alreadyDecidedText, bulkButtonText, bulkConfirmBody, bulkConfirmTitle, bulkPlan, bulkResultText, bulkUnplacedNote, bulkWaitingText, isAlreadyDecided, maskFoundText, nextZoom, fitWidth } from './reviewRules';
 import { Kbd, Notice, Spinner } from './atoms';
 import { PageFailed, sameImage, useObjectUrl } from './pageImage';
@@ -339,13 +339,21 @@ export default function Review({ caps }: { caps: string[] }) {
             )}
 
             {pageCheck && <p className="cf-page-unreadable"><strong>{secondCheckBanner(selected.secondCheck, selected.pageNumber) ?? UNREAD_PAGE_WORDS.label}</strong></p>}
-            <p className="cf-decision-reason">{selected.entityType === UNREAD_PAGE ? (isFinalCheck(selected.secondCheck) ? FINAL_CHECK_WORDS.why : selected.secondCheck ? SECOND_CHECK_WORDS.why : UNREAD_PAGE_WORDS.why) : whyAsked(selected.reason, selected.confidence, queue?.autoRedactThreshold)}</p>
+            <p className="cf-decision-reason">{selected.entityType === UNREAD_PAGE ? (isFinalCheck(selected.secondCheck) ? finalCheckWhy(selected.secondCheck) : selected.secondCheck ? SECOND_CHECK_WORDS.why : UNREAD_PAGE_WORDS.why) : whyAsked(selected.reason, selected.confidence, queue?.autoRedactThreshold)}</p>
 
             <dl className="cf-facts">
               <div><dt>Case</dt><dd className="cf-mono">{titles.get(selected.packageId) ?? '—'}</dd></div>
               <div><dt>Document</dt><dd>{selected.fileName}, page {selected.pageNumber}</dd></div>
               {foundByText(selected.foundBy) && <div><dt>Found by</dt><dd>{isFinalCheck(selected.secondCheck) ? FINAL_CHECK_WORDS.foundBy : selected.secondCheck ? SECOND_CHECK_WORDS.foundBy : foundByText(selected.foundBy)}</dd></div>}
             </dl>
+            {finalCheckReason(selected.secondCheck) && (
+              <details className="cf-disclosure">
+                <summary>Technical details</summary>
+                <dl className="cf-facts">
+                  <div><dt>{FINAL_CHECK_WORDS.reason}</dt><dd className="cf-mono">{finalCheckReason(selected.secondCheck)}</dd></div>
+                </dl>
+              </details>
+            )}
 
             {pageCheck && (
               <>

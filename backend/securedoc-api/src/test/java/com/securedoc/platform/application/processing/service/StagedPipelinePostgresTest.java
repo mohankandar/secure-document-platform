@@ -433,8 +433,15 @@ class StagedPipelinePostgresTest {
         service.plan(trigger(pkg));
         runAll(PipelineStage.TEXT);
         runAll(PipelineStage.FIND);
-        assertEquals(PackageStatus.PENDING_REVIEW, status(pkg), "as today: a finding for a person");
-        assertEquals(0, count(pkg, PipelineStage.REDACT), "nothing is redacted before the review");
+        // Task 0119 (owner: one review stop per case): before the case stops for a person, each document has its
+        // REDACT run: the one with a finding for a person gets the checks on a trial file, the other is redacted.
+        assertEquals(PackageStatus.PROCESSING, status(pkg), "not yet: the checks run first");
+        assertEquals(2, count(pkg, PipelineStage.REDACT), "each document's checks before the review");
+        runAll(PipelineStage.REDACT);
+        assertEquals(PackageStatus.PENDING_REVIEW, status(pkg), "a finding for a person");
+        assertEquals(1, documents.findByPackageIdAndTenantId(pkg.id(), pkg.tenantId()).stream()
+                .filter(d -> d.status() == DocumentStatus.PROCESSED).count(), "the other document is finished");
+        verify(exports, times(0)).queueCaseExport(any(), any(), org.mockito.ArgumentMatchers.anyInt(), any());
 
         Finding reviewed = findings.findByDocumentIdAndTenantId(forReview.get(0).documentId(), pkg.tenantId()).get(0);
         reviewed.confirm(ActorId.generate(), "reviewed");

@@ -69,7 +69,9 @@ public record BusinessAdminConfigurationResponse(
             double visionOcrThreshold,
             /* Task 0083: a second AI reads the finished file (off by default). */
             boolean secondCheckEnabled,
-            boolean documentContextEnabled
+            boolean documentContextEnabled,
+            /* Task 0119: the final check reads picture pages no person looked at again (on by default). */
+            boolean finalCheckRereadEnabled
     ) {}
 
     /** Task 0062: the redaction catalog and the regulation packs; the same for every entity. */
