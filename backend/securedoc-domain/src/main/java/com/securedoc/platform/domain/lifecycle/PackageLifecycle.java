@@ -164,16 +164,24 @@ public final class PackageLifecycle {
     /**
      * Task 0104: a delivered case takes its next batch. The delete times set by the last delivery stop, so the new
      * batch's files are not purged while it is processing or in Review; its own delivery sets them again (the keep
-     * period runs from the last delivery). A purged case takes no batch.
+     * period runs from the last delivery).
+     *
+     * <p>Owner 2026-11-28: a case whose files were already deleted still takes its next batch (one case per contract).
+     * The purge marks are cleared, so the new batch's files get their own keep period and are deleted after its own
+     * delivery; the earlier deletion stays in the audit trail and in the batch history.
+     *
+     * @return true when the files of the earlier batches had been deleted
      */
-    public void startNextBatch(Instant now) {
+    public boolean startNextBatch(Instant now) {
         Objects.requireNonNull(now);
-        if (purgedAt != null || originalPurgedAt != null) {
-            throw new IllegalStateException("Original artifacts have already been purged");
-        }
+        boolean earlierFilesDeleted = purgedAt != null || originalPurgedAt != null;
+        purgedAt = null;
+        originalPurgedAt = null;
+        redactedPurgedAt = null;
         originalDeleteAt = null;
         redactedDeleteAt = null;
         updatedAt = now;
+        return earlierFilesDeleted;
     }
 
     public boolean isRedactedPurgeDue(Instant now) {

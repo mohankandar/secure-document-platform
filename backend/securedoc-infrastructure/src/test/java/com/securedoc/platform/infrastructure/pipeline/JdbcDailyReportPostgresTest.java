@@ -97,6 +97,43 @@ class JdbcDailyReportPostgresTest {
         }
     }
 
+
+    /**
+     * Task 0104, owner 2026-11-28 09:55: a folder drop of files received a month ago, for a case whose files were deleted
+     * 24 days ago, is refused on the existing duplicate path (the watched folder's DUPLICATE record with
+     * DUPLICATE_INTAKE, LV-INT-017, as {@code WatchedFolderBatchTest} proves) and counted in the day's "Duplicates" of the
+     * watched folder, not as a refusal.
+     */
+    @Test
+    void aFolderResendAMonthAfterTheFilesWereDeletedIsCountedAsADuplicate() throws Exception {
+        try (PostgresTestDatabase db = PostgresTestDatabase.migrated("dailyresend")) {
+            jdbc = db.jdbc();
+            TestRows.tenant(jdbc, mine);
+            UUID kase = UUID.randomUUID();
+            Instant monthAgo = NOW.minus(java.time.Duration.ofDays(31));
+            jdbc.update("""
+                    insert into document_packages (id, tenant_id, package_type, status, created_by, created_at, updated_at, dashboard_hidden_at)
+                    values (:id, :t, 'FOLDER_INTAKE', 'COMPLETED', :actor, :at, :at, :purged)
+                    """, new MapSqlParameterSource("id", kase).addValue("t", mine.value()).addValue("actor", UUID.randomUUID())
+                    .addValue("at", Timestamp.from(monthAgo)).addValue("purged", Timestamp.from(NOW.minus(java.time.Duration.ofDays(24)))));
+            jdbc.update("""
+                    insert into package_lifecycles (package_id, tenant_id, successful_export_cycles, purged_at, updated_at)
+                    values (:p, :t, 1, :purged, :purged)
+                    """, new MapSqlParameterSource("p", kase).addValue("t", mine.value())
+                    .addValue("purged", Timestamp.from(NOW.minus(java.time.Duration.ofDays(24)))));
+            jdbc.update("""
+                    insert into intake_observations (id, tenant_id, source_reference, status, reason_code, package_id,
+                                                     first_seen_at, visible_after, updated_at)
+                    values (gen_random_uuid(), :t, 'drop-month-later', 'DUPLICATE', 'DUPLICATE_INTAKE', :p, :at, :at, :at)
+                    """, new MapSqlParameterSource("t", mine.value()).addValue("p", kase).addValue("at", Timestamp.from(at("09:15"))));
+
+            DailyReport r = report(mine, ReportScope.EVERYTHING);
+
+            DailyReport.Source folder = r.sources().stream().filter(s -> s.key().equals("folder:installed")).findFirst().orElseThrow();
+            assertEquals(1, folder.duplicates(), "counted under Duplicates");
+            assertEquals(0, folder.refused());
+        }
+    }
     private void onlyOneSourceSystem() {
         DailyReport r = report(mine, new ReportScope(push.value().toString(), "ALL"));
         assertEquals(9, r.received().cases());

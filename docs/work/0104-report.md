@@ -126,3 +126,33 @@ Proof (reactor builds, `mvn -o -Pdev-build -pl securedoc-api -am test -Dtest=...
 6. A reused API revision or document id with other bytes is a new batch or version, not LV-INT-018/019.
 
 No other product's name or behaviour in code (DocuSign and eOriginal are named only in the design document, as sources of files).
+
+## Owner's answers of 2026-11-28 09:45 and 09:55 (session 2026-11-28, day)
+Merged the newest integration branch first. **Migration renumbered: 088 became 093** (0110 took 088 for the audit table; 092 is used by 0108 on its branch). Its change sets are now `093-01` to `093-06`; nothing outside throwaway databases ever ran the 088 names.
+
+1. **All files identical: refused, on the existing LV-INT-017 path** (CASE_VERSIONS.md section 3, rule 4 changed).
+   - `CaseBatchIntake.join` compares the files first. When every one is an exact copy it answers `ALL_COPIES` and writes nothing: no batch, no file record, also for a busy case (refused at once, not kept waiting).
+   - The watched folder sends that to its existing duplicate path: DUPLICATE record with `DUPLICATE_INTAKE` (LV-INT-017) and the case it was received for, the duplicates count, the "already received" place, the `INTAKE_DUPLICATE` audit line. Reports > Daily counts it under "Duplicates" of the watched folder.
+   - Some identical and some changed: as designed (copies skipped and recorded, changed ones processed). The earlier "accepted with nothing processed" test is replaced (`WatchedFolderBatchTest`, `CaseBatchIntakeTest`); I changed those two tests on purpose, because the owner changed the rule.
+   - No new alert or e-mail.
+2. **Decision (a): a case whose files were deleted takes the contract's next batch** (design section 2a).
+   - `openCaseFor` no longer leaves out purged cases.
+   - `PackageLifecycle.startNextBatch` no longer refuses a purged case: it clears the purge marks (the new batch gets its own keep period from its own delivery) and says whether files had been deleted. The test "a purged case takes no batch" is replaced by its opposite, as decided.
+   - The batch is marked `earlier_files_deleted` (new column, commented), and the case shows on the dashboard again (`PackageDashboardVisibilityPort.show`).
+   - **Keyed contract fingerprint** (`case_contract_keys`, new table in 093, commented, on delete cascade with the case): `CaseFieldService.contractKeys` makes it from the primary and required fields, each normalised by its rule, with the entity's fingerprint key (platform-core `Fingerprinter`, context per entity, every usable key version). Without a key service: none, never a plain hash. Written by `CreatePackageService` for every new case and by every join.
+   - When the arrival's values made a new record (the old ones were erased), the case is found by the fingerprint and pointed at the new record (`DocumentPackage.relinkBusinessRecord`), so it shows and delivers this batch's values.
+   - SHA-256 fingerprints already stayed after the files were deleted (`case_batch_files`, `documents.checksum_value`). The month-later tests below prove it.
+3. Data dictionary regenerated (`scripts\Update-LexaVault-DataDictionary.ps1 -JarPath ...`, 118 tables, every column commented).
+
+**Proof** (reactor builds, `mvn -o -Pdev-build -pl <module> -am test -Dtest=...`, no `mvn install`; jar for the dictionary from `mvn -Pdev-build -DskipTests package`; throwaway PostgreSQL `qc-0104-pg` on port 55404):
+
+| Run | Result |
+|---|---|
+| `WatchedFolderBatchTest` (new: resend refused as already received; resend for a case in Review refused at once; **a resend a month after the files and values were deleted is refused and counted as a duplicate**; a changed document a month later joins the same case, takes the new record, keeps its fingerprint, new keep period, back on the dashboard, history says files deleted) | 6 of 6 |
+| `CaseBatchIntakeTest` (all copies: nothing written; one copy and one changed file: only the changed one processed) | 8 of 8 |
+| `CaseFieldServiceTest` (new: contract key normalised, per entity, holds no value, none without a key service or with a key field missing) | 13 of 13 |
+| `BatchExportCycleLimitTest` (replaced: a case whose files were deleted takes its next batch with its own keep period) | 5 of 5 |
+| Postgres: `JdbcCaseBatchStorePostgresTest` (new: found by keyed fingerprint, any key version, never another entity's, once per case, gone with the case, earlier-files-deleted flag; changed: a purged case stays open), `JdbcDailyReportPostgresTest` (new: **the month-later resend counted under the watched folder's Duplicates, not refused**), every `*MigrationPostgresTest` | 26 of 26 in that run |
+| API module: `FreshDatabaseStartPostgresTest`, `DataDictionaryPostgresTest`, `CaseFieldsAppPostgresTest`, `UploadCaseLockPostgresTest`, `CreatePackage*Test`, `WatchedFolder*Test`, `PackageLifecycle*Test`, `RetentionTimersTest`, `ExportRetentionTest`, `StagedPipelinePostgresTest` | 74 of 74 |
+
+**Not covered yet:** the API and polling refusal of an all-copies batch goes through `JdbcIntakeRefusals` once those intakes are wired (next item); the watched folder is the only intake that joins today.

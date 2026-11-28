@@ -54,6 +54,17 @@ public final class CreatePackageService implements CreatePackageUseCase {
         return this;
     }
 
+    private com.securedoc.platform.application.port.out.CaseBatchStore contractKeys;
+
+    /**
+     * Task 0104 (owner 2026-11-28): keeps the contract's keyed fingerprint with each new case, so a batch arriving
+     * after the case's files and case-field values were deleted still joins it. Without it nothing is kept.
+     */
+    public CreatePackageService withContractKeys(com.securedoc.platform.application.port.out.CaseBatchStore store) {
+        this.contractKeys = Objects.requireNonNull(store);
+        return this;
+    }
+
     private com.securedoc.platform.application.intake.CaseInstructionsService instructions;
 
     /** Task 0065: without it case instructions are refused. */
@@ -109,6 +120,10 @@ public final class CreatePackageService implements CreatePackageUseCase {
                     command.intakeFingerprint(), command.sourceReference(), principal.actorId(),
                     PackageMetadata.of(command.metadata()), command.caseSensitivity().level());
             packageRepository.save(made);
+            if (contractKeys != null) {
+                caseFields.contractKeys(principal.tenantId(), command.businessIdentifiers()).stream().findFirst()
+                        .ifPresent(key -> contractKeys.rememberContract(principal.tenantId(), made.id(), key));
+            }
             if (instructed) {
                 instructions.atIntake(principal.tenantId(), principal.actorId(), made.id(), command.instructions(),
                         command.correlationId());

@@ -6,6 +6,7 @@ import com.securedoc.platform.application.intake.command.UploadDocumentCommand;
 import com.securedoc.platform.application.port.in.SubmitPackageUseCase;
 import com.securedoc.platform.application.port.in.UploadDocumentUseCase;
 import com.securedoc.platform.application.port.out.CaseBatchStore;
+import com.securedoc.platform.application.port.out.PackageDashboardVisibilityPort;
 import com.securedoc.platform.application.port.out.PackageLifecycleRepository;
 import com.securedoc.platform.application.port.out.PackageRepository;
 import com.securedoc.platform.application.port.out.PdfFileIdentityPort;
@@ -14,6 +15,7 @@ import com.securedoc.platform.domain.document.DocumentPackage;
 import com.securedoc.platform.domain.document.DocumentStatus;
 import com.securedoc.platform.domain.document.version.DocumentVersionRecognition;
 import com.securedoc.platform.domain.document.version.DocumentVersionRecognition.Outcome;
+import com.securedoc.platform.domain.identity.BusinessRecordId;
 import com.securedoc.platform.domain.identity.CorrelationId;
 import com.securedoc.platform.domain.identity.DocumentId;
 import com.securedoc.platform.domain.identity.PackageId;
@@ -33,17 +35,24 @@ import java.util.UUID;
 /**
  * Task 0104 ({@code docs/design/CASE_VERSIONS.md}): an arrival for a contract that already has an open case joins that
  * case as its next batch, instead of making a new case. Each file is an exact copy (skipped, recorded, not processed or
- * counted), a new document or a new version; only the new ones are stored and processed. Refuses nothing for being a
- * resend.
+ * counted), a new document or a new version; only the new ones are stored and processed.
+ *
+ * <p>An arrival whose files are <b>all</b> exact copies of files the case received before is {@link Kind#ALL_COPIES}
+ * (owner 2026-11-28 09:45): nothing is written, and the intake refuses it on its existing "already received" path
+ * (LV-INT-017), so it is counted where duplicates are counted.
  *
  * <p>The intakes call {@link #openCase} first: empty means "make a new case as before". A case that is processing, in
  * Review or still being filled is {@link Kind#BUSY}: the arrival waits (it is not refused and not merged into the running
  * batch). An interrupted join is resumed by the same arrival: the batch it opened is reused and the files already in it
  * are not stored again.
+ *
+ * <p>Owner 2026-11-28 (decision (a)): a case whose files (and case-field values) were already deleted by retention still
+ * takes the contract's next batch. It is found by the contract's keyed fingerprint when the arrival's values made a new
+ * case-field record; the case is pointed at that record, and the batch history says the earlier files were deleted.
  */
 public class CaseBatchIntake {
 
-    public enum Kind { JOINED, NOTHING_NEW, BUSY }
+    public enum Kind { JOINED, ALL_COPIES, BUSY }
 
     /**
      * @param processed new documents and new versions stored for processing
@@ -63,6 +72,20 @@ public class CaseBatchIntake {
         }
     }
 
+    /**
+     * Who the arrival's case fields say the contract is: the case-field record its values resolved to, and the
+     * contract's keyed fingerprints (current key version first; empty without a key service).
+     */
+    public record Contract(UUID businessRecordId, List<String> keys) {
+        public Contract {
+            keys = keys == null ? List.of() : List.copyOf(keys);
+        }
+
+        public static Contract record(UUID businessRecordId) {
+            return new Contract(businessRecordId, List.of());
+        }
+    }
+
     private final CaseBatchStore store;
     private final CaseBatchService batches;
     private final PackageRepository packages;
@@ -71,6 +94,12 @@ public class CaseBatchIntake {
     private final SubmitPackageUseCase submit;
     private final PdfFileIdentityPort identity;
     private final Clock clock;
+    private PackageDashboardVisibilityPort visibility = new PackageDashboardVisibilityPort() {
+        @Override
+        public void hide(PackageId packageId, TenantId tenantId, com.securedoc.platform.domain.identity.ActorId actorId,
+                         java.time.Instant hiddenAt) {
+        }
+    };
 
     public CaseBatchIntake(CaseBatchStore store, PackageRepository packages, PackageLifecycleRepository lifecycles,
                            UploadDocumentUseCase upload, SubmitPackageUseCase submit, PdfFileIdentityPort identity,
@@ -85,13 +114,28 @@ public class CaseBatchIntake {
         this.clock = Objects.requireNonNull(clock, "clock");
     }
 
+    /** A case hidden from the dashboard after its files were deleted shows again when its next batch joins. */
+    public CaseBatchIntake withVisibility(PackageDashboardVisibilityPort visibility) {
+        this.visibility = Objects.requireNonNull(visibility);
+        return this;
+    }
+
     /**
      * The open case of the contract an arrival resolves to: the newest case on its case-field record that is not
-     * rejected, cancelled or erased. Empty: the arrival makes a new case, as before.
+     * rejected or cancelled. Empty: the arrival makes a new case, as before.
      */
     public Optional<DocumentPackage> openCase(TenantId tenantId, UUID businessRecordId) {
-        return store.openCaseFor(tenantId, businessRecordId)
-                .flatMap(id -> packages.findByIdAndTenantId(id, tenantId))
+        return openCase(tenantId, Contract.record(businessRecordId));
+    }
+
+    /**
+     * As {@link #openCase(TenantId, UUID)}; when the record has no case (its earlier values were erased, so the arrival's
+     * values made a new record), the case whose contract has the same keyed fingerprint.
+     */
+    public Optional<DocumentPackage> openCase(TenantId tenantId, Contract contract) {
+        Optional<PackageId> found = store.openCaseFor(tenantId, contract.businessRecordId());
+        if (found.isEmpty()) found = store.openCaseForContract(tenantId, contract.keys());
+        return found.flatMap(id -> packages.findByIdAndTenantId(id, tenantId))
                 .filter(DocumentPackage::isOpenForBatches);
     }
 
@@ -100,29 +144,38 @@ public class CaseBatchIntake {
         return !openCase.takesNextBatchNow();
     }
 
-    /**
-     * Joins the arrival to the case as its next batch (or resumes the batch an interruption cut short), stores and
-     * submits its new documents, and records every file. The case must be between batches; otherwise {@link Kind#BUSY}
-     * and nothing is changed.
-     */
     public Result join(AuthenticatedPrincipal principal, DocumentPackage openCase, String source, List<IncomingFile> files,
                        CorrelationId correlationId) {
+        return join(principal, openCase, source, files, correlationId, null);
+    }
+
+    /**
+     * Joins the arrival to the case as its next batch (or resumes the batch an interruption cut short), stores and
+     * submits its new documents, and records every file. The files are compared first: when every one is an exact copy
+     * the result is {@link Kind#ALL_COPIES} and nothing is changed, also for a busy case. Otherwise a case that is not
+     * between batches is {@link Kind#BUSY} and nothing is changed.
+     *
+     * @param contract the arrival's contract (record and keyed fingerprints), or null when the intake has none
+     */
+    public Result join(AuthenticatedPrincipal principal, DocumentPackage openCase, String source, List<IncomingFile> files,
+                       CorrelationId correlationId, Contract contract) {
         Objects.requireNonNull(principal, "principal");
         Objects.requireNonNull(openCase, "openCase");
         Objects.requireNonNull(source, "source");
         Objects.requireNonNull(files, "files");
         TenantId tenant = principal.tenantId();
         PackageId caseId = openCase.id();
-        if (busy(openCase)) return new Result(Kind.BUSY, caseId, 0, 0, 0);
+        boolean between = !busy(openCase);
+        // A case made without batches gets its documents recorded as batch 1 first, so the arrival is compared with them.
+        store.ensureHistory(tenant, caseId);
 
         // An interrupted join left its batch open (RECEIVED, with stored documents not yet submitted): reuse it.
-        boolean resuming = openCase.documents().stream().anyMatch(d -> d.status() == DocumentStatus.UPLOADED);
+        boolean resuming = between && openCase.documents().stream().anyMatch(d -> d.status() == DocumentStatus.UPLOADED);
         Optional<CaseBatchStore.BatchState> latest = store.latestBatch(tenant, caseId);
-        CaseBatchStore.Batch batch = resuming && latest.isPresent() && "RECEIVED".equals(latest.get().state())
-                && latest.get().number() > 1
-                ? new CaseBatchStore.Batch(latest.get().id(), latest.get().number())
-                : store.openBatch(tenant, caseId, source, clock.instant());
-        Set<String> alreadyRecorded = resuming ? store.recordedFiles(tenant, batch.id()) : Set.of();
+        Optional<CaseBatchStore.Batch> resumable = resuming && latest.isPresent()
+                && "RECEIVED".equals(latest.get().state()) && latest.get().number() > 1
+                ? Optional.of(new CaseBatchStore.Batch(latest.get().id(), latest.get().number())) : Optional.empty();
+        Set<String> alreadyRecorded = resumable.map(b -> store.recordedFiles(tenant, b.id())).orElse(Set.of());
 
         List<IncomingFile> toClassify = new ArrayList<>();
         List<DocumentVersionRecognition.Arrival> arrivals = new ArrayList<>();
@@ -142,6 +195,32 @@ public class CaseBatchIntake {
         }
 
         List<CaseBatchService.Decision> decisions = batches.classify(tenant, caseId, arrivals);
+        boolean anythingNew = decisions.stream().anyMatch(d -> d.result().outcome() != Outcome.SKIPPED_IDENTICAL);
+        if (!anythingNew && !resuming && !files.isEmpty()) {
+            // Owner 2026-11-28 09:45: every file was received before: refused as "already received", nothing recorded.
+            return new Result(Kind.ALL_COPIES, caseId, 0, 0, decisions.size());
+        }
+        if (!between) return new Result(Kind.BUSY, caseId, 0, 0, 0);
+
+        CaseBatchStore.Batch batch = resumable.orElseGet(() -> store.openBatch(tenant, caseId, source, clock.instant()));
+        DocumentPackage joining = openCase;
+        if (contract != null && contract.businessRecordId() != null && !openCase.businessRecordId()
+                .map(r -> r.value().equals(contract.businessRecordId())).orElse(false)) {
+            // The earlier values were erased: the case takes the record this batch's values were stored in.
+            joining.relinkBusinessRecord(BusinessRecordId.of(contract.businessRecordId()));
+            packages.save(joining);
+        }
+        if (contract != null && !contract.keys().isEmpty()) store.rememberContract(tenant, caseId, contract.keys().getFirst());
+        // The keep period of the last delivery stops; this batch's own delivery sets it again. Files deleted already: the
+        // case takes the batch all the same, and its history says so.
+        lifecycles.findByPackageIdAndTenantId(caseId, tenant).ifPresent(l -> {
+            if (l.startNextBatch(clock.instant())) {
+                store.markEarlierFilesDeleted(tenant, batch.id());
+                visibility.show(caseId, tenant);
+            }
+            lifecycles.save(l);
+        });
+
         int processed = 0;
         int skipped = 0;
         for (int i = 0; i < decisions.size(); i++) {
@@ -164,16 +243,6 @@ public class CaseBatchIntake {
             processed++;
         }
 
-        boolean somethingNew = processed > 0 || resuming;
-        if (!somethingNew) {
-            store.markNothingNew(tenant, batch.id());
-            return new Result(Kind.NOTHING_NEW, caseId, batch.number(), 0, skipped + resumedSkipped);
-        }
-        // The keep period of the last delivery stops; this batch's own delivery sets it again.
-        lifecycles.findByPackageIdAndTenantId(caseId, tenant).ifPresent(l -> {
-            l.startNextBatch(clock.instant());
-            lifecycles.save(l);
-        });
         submit.execute(SubmitPackageCommand.nextBatch(caseId, correlationId), principal);
         return new Result(Kind.JOINED, caseId, batch.number(), processed + resumedSkipped, skipped);
     }

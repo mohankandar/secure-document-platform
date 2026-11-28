@@ -15,7 +15,7 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Task 0104: tables case_batches and case_batch_files and the version columns of documents (migration 088). Every file
+ * Task 0104: tables case_batches and case_batch_files and the version columns of documents (migration 093). Every file
  * a case ever received stays here for the life of the case, also after its original is purged: the document row may be
  * gone, the fingerprint is not.
  */
@@ -50,11 +50,47 @@ public class JdbcCaseBatchStore implements CaseBatchStore, com.securedoc.platfor
                 select p.id from document_packages p
                 left join package_lifecycles l on l.package_id = p.id
                 where p.tenant_id = :tenant and p.business_record_id = :record
-                  and p.status not in ('REJECTED', 'CANCELLED') and l.purged_at is null
+                  and p.status not in ('REJECTED', 'CANCELLED')
                 order by p.created_at desc, p.id
                 limit 1
                 """, new MapSqlParameterSource("tenant", tenantId.value()).addValue("record", businessRecordId), UUID.class);
         return ids.stream().findFirst().map(PackageId::of);
+    }
+
+    @Override
+    public java.util.Optional<PackageId> openCaseForContract(TenantId tenantId, List<String> contractKeys) {
+        if (contractKeys == null || contractKeys.isEmpty()) return java.util.Optional.empty();
+        List<UUID> ids = jdbc.queryForList("""
+                select p.id from case_contract_keys k
+                join document_packages p on p.id = k.package_id and p.tenant_id = k.tenant_id
+                where k.tenant_id = :tenant and k.key_fingerprint in (:keys)
+                  and p.status not in ('REJECTED', 'CANCELLED')
+                order by p.created_at desc, p.id
+                limit 1
+                """, new MapSqlParameterSource("tenant", tenantId.value()).addValue("keys", contractKeys), UUID.class);
+        return ids.stream().findFirst().map(PackageId::of);
+    }
+
+    @Override
+    public void rememberContract(TenantId tenantId, PackageId packageId, String contractKey) {
+        if (contractKey == null || contractKey.isBlank()) return;
+        jdbc.update("""
+                insert into case_contract_keys (id, tenant_id, package_id, key_fingerprint, created_at)
+                select :id, p.tenant_id, p.id, :key, clock_timestamp()
+                from document_packages p where p.id = :pkg and p.tenant_id = :tenant
+                on conflict (package_id, key_fingerprint) do nothing
+                """, params(tenantId, packageId).addValue("id", UUID.randomUUID()).addValue("key", contractKey));
+    }
+
+    @Override
+    public void markEarlierFilesDeleted(TenantId tenantId, UUID batchId) {
+        jdbc.update("update case_batches set earlier_files_deleted = true where id = :batch and tenant_id = :tenant",
+                new MapSqlParameterSource("tenant", tenantId.value()).addValue("batch", batchId));
+    }
+
+    @Override
+    public void ensureHistory(TenantId tenantId, PackageId packageId) {
+        adoptFirstBatch(tenantId, packageId);
     }
 
     @Override
@@ -138,7 +174,7 @@ public class JdbcCaseBatchStore implements CaseBatchStore, com.securedoc.platfor
     }
 
     /**
-     * A case made without batches: its documents become batch 1 (as migration 088 did for the cases before it), with the
+     * A case made without batches: its documents become batch 1 (as migration 093 did for the cases before it), with the
      * cycles that delivered it, so the next batch is compared against them, numbered 2 and counted from there. Runs once:
      * nothing happens when the case has a batch.
      */

@@ -307,6 +307,54 @@ public final class CaseFieldService {
     }
 
     /**
+     * Task 0104 (owner 2026-11-28): the contract's keyed fingerprint, kept with the case so a batch arriving after its
+     * case-field values were erased still finds it. Made from the key fields (primary and required), each normalised by
+     * its own rule, with the entity's fingerprint key; never a plain hash, never a value. The first is by the current key
+     * version, the others by older usable versions (to find a case from before a key rotation). Empty without a key
+     * service, when a key field is missing or invalid, or when the key service does not answer: the arrival then makes a
+     * new case once the values are gone, never joins a wrong one.
+     */
+    public List<String> contractKeys(TenantId tenantId, Map<String, String> supplied) {
+        if (fingerprinter == null || supplied == null) return List.of();
+        List<FieldDefinition> active = active(tenantId);
+        Map<String, List<FieldValue>> given;
+        try {
+            given = given(active, supplied);
+        } catch (IntakeValidationException invalid) {
+            return List.of();
+        }
+        StringBuilder canonical = new StringBuilder();
+        for (FieldDefinition definition : active.stream().sorted(Comparator.comparing(d -> d.key().folded())).toList()) {
+            if (!definition.spec().primary() && !definition.spec().required()) continue;
+            List<FieldValue> sent = given.get(definition.key().value());
+            if (sent == null || sent.isEmpty()) return List.of();
+            List<String> normalised = new ArrayList<>();
+            for (FieldValue value : sent) {
+                var checked = FieldValidator.check(definition.spec(), value);
+                if (!checked.ok()) return List.of();
+                normalised.add(checked.valid().normalisedText());
+            }
+            normalised.sort(Comparator.naturalOrder());
+            canonical.append(definition.key().folded()).append('\u0000');
+            normalised.forEach(v -> canonical.append(v).append('\u0001'));
+            canonical.append('\u0002');
+        }
+        if (canonical.isEmpty()) return List.of();
+        String context = "lexavault-contract:" + tenantId.value();
+        try {
+            List<String> keys = new ArrayList<>();
+            keys.add(fingerprinter.fingerprint(customer, context, canonical.toString()).text());
+            for (var older : fingerprinter.searchTerms(customer, context, canonical.toString())) {
+                if (!keys.contains(older.text())) keys.add(older.text());
+            }
+            return List.copyOf(keys);
+        } catch (CryptoException closed) {
+            log.warn("CASE_CONTRACT_KEY_NOT_MADE code={}", closed.code().name());
+            return List.of();
+        }
+    }
+
+    /**
      * The values as they may take part in a plain digest of a request (the checks for repeats): each value of a sensitive
      * field replaced by its keyed fingerprint, so the digest tells nothing about it. One map per usable version of the
      * fingerprint key, the latest first; a request from before a key rotation matches one of the others.

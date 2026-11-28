@@ -33,4 +33,15 @@ public class JpaPackageDashboardVisibilityAdapter implements PackageDashboardVis
             packageRepository.save(entity);
         }
     }
+
+    @Override
+    @Transactional
+    public void show(PackageId packageId, TenantId tenantId) {
+        packageRepository.findByIdAndTenantId(packageId.value(), tenantId.value()).ifPresent(entity -> {
+            if (entity.getDashboardHiddenAt() == null) return;
+            entity.setDashboardHiddenAt(null);
+            entity.setDashboardHiddenBy(null);
+            packageRepository.save(entity);
+        });
+    }
 }

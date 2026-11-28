@@ -71,18 +71,88 @@ class WatchedFolderBatchTest {
         assertEquals(PackageStatus.IN_REVIEW, h.pkg.status());
     }
 
+    /**
+     * Owner 2026-11-28 09:45/09:55 (replaces "accepted with nothing processed"): a drop whose files were all received
+     * before is refused on the existing "already received" path: LV-INT-017, a DUPLICATE record, the duplicates count,
+     * the folder's "already received" place and the audit line. Nothing is recorded in the case.
+     */
     @Test
-    void theSamePackageResentIsAcceptedAndRecordedWithNothingProcessed() {
+    void theSamePackageResentIsRefusedAsAlreadyReceived() {
         Harness h = new Harness(PackageStatus.COMPLETED, candidate("drop-resent", doc("first.pdf", "first")));
 
         ScanWatchedFolderResult result = h.service.scan(principal, CorrelationId.generate());
 
-        assertEquals(1, result.accepted(), "a business resend is never refused");
-        assertEquals(0, result.duplicates());
+        assertAlreadyReceived(h, result);
+    }
+
+    @Test
+    void aResendForACaseInReviewIsRefusedAtOnceNotKeptWaiting() {
+        Harness h = new Harness(PackageStatus.IN_REVIEW, candidate("drop-resent", doc("first.pdf", "first")));
+
+        ScanWatchedFolderResult result = h.service.scan(principal, CorrelationId.generate());
+
+        assertAlreadyReceived(h, result);
+        assertEquals(0, h.source.released);
+        assertEquals(PackageStatus.IN_REVIEW, h.pkg.status());
+    }
+
+    /**
+     * Owner 2026-11-28 09:45: the same file a month after the case's files and case-field values were deleted. Its
+     * fingerprint is still kept, the contract is found by its keyed fingerprint (the values made a new record), and the
+     * resend is refused as "already received" and counted there.
+     */
+    @Test
+    void aResendAMonthAfterTheFilesWereDeletedIsStillRecognisedAndCountedAsADuplicate() {
+        Harness h = new Harness(PackageStatus.COMPLETED, candidate("drop-month-later", doc("first.pdf", "first")))
+                .filesAndValuesDeleted();
+
+        ScanWatchedFolderResult result = h.service.scan(principal, CorrelationId.generate());
+
+        assertAlreadyReceived(h, result);
+        assertTrue(h.lifecycle.purgedAt().isPresent(), "nothing reopened for a refused resend");
+    }
+
+    /**
+     * Owner 2026-11-28 09:45: a changed document for the same contract a month after the files were deleted joins the
+     * same case as its next version; identical ones are skipped. The case takes the new record of values, its contract
+     * fingerprint, a new keep period, shows on the dashboard again, and its history says the earlier files were deleted.
+     */
+    @Test
+    void aChangedDocumentAMonthAfterTheFilesWereDeletedJoinsTheSameCase() {
+        Harness h = new Harness(PackageStatus.COMPLETED,
+                candidate("drop-month-later", doc("first.pdf", "first"), doc("second.pdf", "second, re-signed")))
+                .filesAndValuesDeleted();
+
+        ScanWatchedFolderResult result = h.service.scan(principal, CorrelationId.generate());
+
+        assertEquals(1, result.accepted());
+        assertEquals(0, h.creates, "the same case, never a new one");
+        assertEquals(List.of("second.pdf"), h.uploaded);
+        assertEquals(List.of(DocumentVersionRecognition.Outcome.SKIPPED_IDENTICAL, DocumentVersionRecognition.Outcome.NEW_DOCUMENT),
+                h.recordedOutcomes);
+        assertEquals(Optional.of(BusinessRecordId.of(h.arrivalRecord)), h.pkg.businessRecordId(),
+                "the case shows and delivers the values of this batch");
+        assertEquals(List.of("K-current"), h.remembered);
+        assertEquals(1, h.earlierFilesDeleted, "the history says the earlier files were deleted");
+        assertEquals(1, h.shown, "back on the dashboard");
+        assertTrue(h.lifecycle.purgedAt().isEmpty(), "its own keep period starts at its own delivery");
+        assertEquals(PackageStatus.SUBMITTED, h.pkg.status());
+    }
+
+    private void assertAlreadyReceived(Harness h, ScanWatchedFolderResult result) {
+        assertEquals(0, result.accepted());
+        assertEquals(1, result.duplicates(), "counted where duplicates are counted");
+        assertEquals(IntakeDisposition.DUPLICATE, h.source.disposition, "the folder's \"already received\" place");
+        assertEquals(IntakeObservationStatus.DUPLICATE, h.observations.latest.status());
+        assertEquals(com.securedoc.platform.application.intake.model.IntakeRejectionCode.DUPLICATE_INTAKE, h.observations.latest.reasonCode());
+        assertEquals(h.pkg.id(), h.observations.latest.packageId(), "the case it was received for");
+        assertTrue(h.audits.stream().anyMatch(a -> a.action() == com.securedoc.platform.domain.audit.AuditAction.INTAKE_DUPLICATE
+                && a.detail().contains("code=LV-INT-017")), "the audit line, with LV-INT-017");
         assertTrue(h.uploaded.isEmpty());
+        assertTrue(h.recordedOutcomes.isEmpty(), "nothing recorded in the case");
+        assertEquals(0, h.opened, "no batch opened");
         assertEquals(0, h.dispatched);
-        assertEquals(PackageStatus.COMPLETED, h.pkg.status());
-        assertEquals(List.of(DocumentVersionRecognition.Outcome.SKIPPED_IDENTICAL), h.recordedOutcomes);
+        assertEquals(0, h.creates);
     }
 
     private final class Harness {
@@ -92,10 +162,27 @@ class WatchedFolderBatchTest {
         final List<String> uploaded = new ArrayList<>();
         final List<DocumentVersionRecognition.Outcome> recordedOutcomes = new ArrayList<>();
         final WatchedFolderIntakeService service;
+        final UUID arrivalRecord = UUID.randomUUID();
+        final List<String> remembered = new ArrayList<>();
+        final List<com.securedoc.platform.domain.audit.AuditRecord> audits = new ArrayList<>();
+        final PackageLifecycle lifecycle = PackageLifecycle.create(PackageId.generate(), tenantId);
+        boolean erased;
         int creates;
         int dispatched;
+        int opened;
+        int earlierFilesDeleted;
+        int shown;
+
+        /** The case was delivered long ago; retention deleted its files and its case-field values since. */
+        Harness filesAndValuesDeleted() {
+            lifecycle.markFinalPurged(Instant.now().minus(Duration.ofDays(24)));
+            erased = true;
+            return this;
+        }
 
         Harness(PackageStatus status, WatchedFolderCandidate candidate) {
+            lifecycle.recordSuccessfulExport(1, Instant.now().minus(Duration.ofDays(31)),
+                    com.securedoc.platform.domain.lifecycle.TenantLifecyclePolicy.defaults(tenantId));
             source = new SourceStub(candidate);
             Document first = Document.create(tenantId, PackageId.generate(), FileName.of("first.pdf"),
                     MimeType.of("application/pdf"), 5, Checksum.sha256(sha("first")), DocumentType.PDF);
@@ -124,9 +211,17 @@ class WatchedFolderBatchTest {
                         firstId, firstId, 1, sha("first"), 5, CaseBatchService.nameHash("first.pdf"), null, null, null)));
                 @Override public List<DocumentVersionRecognition.Known> knownVersions(TenantId t, PackageId p) { return known; }
                 @Override public Optional<PackageId> openCaseFor(TenantId t, UUID r) {
-                    return r.equals(record) ? Optional.of(pkg.id()) : Optional.empty();
+                    return !erased && r.equals(record) ? Optional.of(pkg.id()) : Optional.empty();
                 }
-                @Override public Batch openBatch(TenantId t, PackageId p, String s, Instant at) { return new Batch(UUID.randomUUID(), 2); }
+                @Override public Optional<PackageId> openCaseForContract(TenantId t, List<String> keys) {
+                    return keys.contains("K-old") ? Optional.of(pkg.id()) : Optional.empty();
+                }
+                @Override public void rememberContract(TenantId t, PackageId p, String key) { remembered.add(key); }
+                @Override public void markEarlierFilesDeleted(TenantId t, UUID b) { earlierFilesDeleted++; }
+                @Override public Batch openBatch(TenantId t, PackageId p, String s, Instant at) {
+                    opened++;
+                    return new Batch(UUID.randomUUID(), 2);
+                }
                 @Override public Optional<BatchState> latestBatch(TenantId t, PackageId p) { return Optional.empty(); }
                 @Override public Set<String> recordedFiles(TenantId t, UUID b) { return Set.of(); }
                 @Override public void markNothingNew(TenantId t, UUID b) { }
@@ -136,7 +231,7 @@ class WatchedFolderBatchTest {
             };
             PackageLifecycleRepository lifecycles = new PackageLifecycleRepository() {
                 @Override public Optional<PackageLifecycle> findByPackageIdAndTenantId(PackageId p, TenantId t) {
-                    return Optional.empty();
+                    return Optional.of(lifecycle);
                 }
                 @Override public void save(PackageLifecycle l) { }
                 @Override public List<PackageLifecycle> findDueRedactedPurge(Instant now, int limit) { return List.of(); }
@@ -160,11 +255,15 @@ class WatchedFolderBatchTest {
                 throw new AssertionError("a drop for an open case makes no new case");
             };
             CaseBatchIntake batches = new CaseBatchIntake(store, packages, lifecycles, upload, submit,
-                    in -> PdfFileIdentityPort.PdfIdentity.NONE, Clock.systemUTC());
+                    in -> PdfFileIdentityPort.PdfIdentity.NONE, Clock.systemUTC()).withVisibility(new PackageDashboardVisibilityPort() {
+                        @Override public void hide(PackageId p, TenantId t, ActorId a, Instant at) { }
+                        @Override public void show(PackageId p, TenantId t) { shown++; }
+                    });
             service = new WatchedFolderIntakeService(source, new LeaseStub(), observations, packages, create, upload, submit,
-                    command -> dispatched++, new AuditService(r -> { }), Duration.ofMinutes(15), Duration.ofSeconds(10))
+                    command -> dispatched++, new AuditService(audits::add), Duration.ofMinutes(15), Duration.ofSeconds(10))
                     .withFileCheck(in -> new PdfIntakeValidationPort.PdfInfo(1))
-                    .withBatches(batches, (t, fields) -> record);
+                    .withBatches(batches, (t, fields) -> erased ? arrivalRecord : record,
+                            (t, fields) -> List.of("K-current", "K-old"));
         }
     }
 

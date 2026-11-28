@@ -13,7 +13,7 @@ Status: design, decided as recommended (open points in section 9). Owner's rules
 - An export cycle delivers **every** document of the case (`PackageDocumentExportService`).
 
 ## 2. The model
-- **Case = contract.** One open case per case-field record. "Open" means not REJECTED, not CANCELLED and not erased.
+- **Case = contract.** One open case per case-field record. "Open" means not REJECTED and not CANCELLED; a case whose files were deleted stays open (section 2a).
 - **Batch** (new table `case_batches`): one arrival.
   - Columns: id, tenant, case, number (1, 2, …), source (folder, API, polling, scan, manual), source reference, received at, export cycle, state.
   - A case's first batch is number 1, so existing cases get batch 1 in the migration.
@@ -30,18 +30,32 @@ Status: design, decided as recommended (open points in section 9). Owner's rules
   - `pdf_identity`: the PDF's first `/ID` and the XMP `DocumentID`, as hashes.
   Old versions are never changed or delivered again.
 
+## 2a. A contract whose files were deleted (owner 2026-11-28, decision (a))
+- A case whose files were deleted by retention **stays open for batches**. A document for that contract later (for example a month later, same member number and name) **joins the same case as its next version** (2, 3, 4 and so on). The case history shows each batch and says "files of earlier batches deleted" (`case_batches.earlier_files_deleted`).
+- The SHA-256 fingerprints stay for the life of the case record (`case_batch_files`, and `documents.checksum_value`, which the purge keeps), so a month-later resend is still recognised as a copy.
+- Once every case of a record is purged, its case-field values are erased (`CaseFieldErasure`). So the contract is also matched by a **keyed fingerprint** of its key case fields (primary and required, each normalised by its own rule), in the new table `case_contract_keys`:
+  - made with the entity's fingerprint key, like the other keyed fingerprints; never a plain hash, never a readable value;
+  - one row per key version, so a case from before a key rotation is still found;
+  - written when a case is made and when a batch joins;
+  - deleted with the case (on delete cascade).
+- The joining batch's values are stored as a new record, and the case is pointed at it, so it shows and delivers them.
+- When the batch joins, the case's purge marks are cleared: the new batch's files get their own keep period from their own delivery. The earlier deletion stays in the audit trail. A case hidden from the dashboard after its purge shows again.
+- Without a key service no fingerprint is kept. Such a contract makes a new case once its values are gone: never a wrong case. Cases made before this change have no fingerprint until their next batch joins by record.
+
 ## 3. A new arrival
 1. Resolve the case fields exactly as today. **All key fields** (primary and required identifying fields) must match one record. When only some match (today's LV-INT-016), the batch goes **to a person** ("Which case?"), never merged and never refused. It waits as an intake to decide, with the same code shown.
 2. Find the open case for that record:
-   - none, or only rejected or erased cases: a **new case**, as today;
-   - an open case: the arrival **joins it as the next batch**.
+   - none, or only rejected or cancelled cases: a **new case**, as today;
+   - an open case: the arrival **joins it as the next batch**;
+   - the record is new because the earlier values were erased: the open case with the same contract fingerprint (section 2a).
 3. For each file, in this order (no reading of the document's text):
    1. **Identical:** its SHA-256 equals any file ever received for the case (all `case_batch_files`). It is `SKIPPED_IDENTICAL`: recorded, not stored, not processed, not counted, not delivered.
    2. **Named by the source:** the API's `externalSourceDocumentId`, a manifest's `documentId` or `replaces`, or the operator's pick at a scan. This gives a `NEW_VERSION` of that lineage, or a `NEW_DOCUMENT` when it names nothing known.
    3. **The file's own identity:** the same PDF `/ID` (first part) or the same XMP `DocumentID` as a lineage's latest version, or an **incremental update** (the new file begins with all the bytes of an earlier version). Each gives a `NEW_VERSION`.
    4. **Still unclear:** a file with the same name as a document but other bytes and no id. It becomes a `NEW_DOCUMENT` marked `possible_version_of`. It never blocks or refuses.
    5. Otherwise: a `NEW_DOCUMENT`.
-4. A batch whose files are all skipped is recorded (the case history shows it) and nothing else happens.
+4. **A batch whose files are all exact copies is refused** back to the sender, as before: LV-INT-017, "already received, no changes" (owner 2026-11-28 09:45; it replaces "recorded, nothing else happens"). It takes the existing duplicate path, so it shows where duplicates already show: the sender's answer ("Already received"), the refusal record (kind DUPLICATE, `JdbcIntakeRefusals`), Reports > Daily "Duplicates" per source system, the folder check's "already received" count, and the audit line. Nothing is recorded in the case and no batch is opened, also when the case is busy. No new alert or e-mail (owner 09:55).
+   A batch with some identical and some changed files: the identical ones are skipped and recorded, the changed ones are processed as the next version (rule 3).
 5. **Pages:** counted once per version processed. Skipped files count 0.
 
 ## 4. Processing a batch

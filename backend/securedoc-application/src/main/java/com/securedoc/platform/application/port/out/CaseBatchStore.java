@@ -10,7 +10,7 @@ import java.util.UUID;
 
 /**
  * Task 0104: a case's batches and every file it ever received (tables case_batches, case_batch_files, and the version
- * columns of documents; migration 088). Fingerprints and hashes only, never a name or a value.
+ * columns of documents; migration 093). Fingerprints and hashes only, never a name or a value.
  */
 public interface CaseBatchStore {
 
@@ -18,10 +18,34 @@ public interface CaseBatchStore {
     List<DocumentVersionRecognition.Known> knownVersions(TenantId tenantId, PackageId packageId);
 
     /**
-     * The open case of a contract: the newest case on this case-field record that is not rejected, not cancelled and not
-     * erased. Empty when there is none: the arrival makes a new case.
+     * The open case of a contract: the newest case on this case-field record that is not rejected and not cancelled. A
+     * case whose files were deleted by retention stays open for batches (owner 2026-11-28). Empty when there is none: the
+     * arrival makes a new case.
      */
     java.util.Optional<PackageId> openCaseFor(TenantId tenantId, UUID businessRecordId);
+
+    /**
+     * Owner 2026-11-28: the open case whose contract has one of these keyed fingerprints (any key version), for an arrival
+     * whose case-field record is new because the earlier values were erased. Same rules as {@link #openCaseFor}.
+     */
+    default java.util.Optional<PackageId> openCaseForContract(TenantId tenantId, List<String> contractKeys) {
+        return java.util.Optional.empty();
+    }
+
+    /** Keeps the contract's keyed fingerprint with the case (once per key version); it goes when the case goes. */
+    default void rememberContract(TenantId tenantId, PackageId packageId, String contractKey) {
+    }
+
+    /**
+     * Records a case made without batches as its batch 1 (as {@link #openBatch} does first), so an arrival can be
+     * compared against its files before any batch is opened. Nothing happens when the case has a batch.
+     */
+    default void ensureHistory(TenantId tenantId, PackageId packageId) {
+    }
+
+    /** The batch joined a case whose earlier batches' files had already been deleted; the case history says so. */
+    default void markEarlierFilesDeleted(TenantId tenantId, UUID batchId) {
+    }
 
     /**
      * Opens the case's next batch and gives it; the first batch of a case is number 1. A case made without batches (by an

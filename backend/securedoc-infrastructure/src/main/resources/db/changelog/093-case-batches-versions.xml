@@ -16,7 +16,7 @@
         Included after 087 in the master changelog, not at its end, so the roll-back tests that count change sets from
         the end need no new count.
     -->
-    <changeSet id="088-01-case-batches" author="lexavault">
+    <changeSet id="093-01-case-batches" author="lexavault">
         <createTable tableName="case_batches">
             <column name="id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
             <column name="tenant_id" type="UUID"><constraints nullable="false"/></column>
@@ -26,6 +26,7 @@
             <column name="received_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
             <column name="export_cycle" type="INT"/>
             <column name="state" type="VARCHAR(24)"><constraints nullable="false"/></column>
+            <column name="earlier_files_deleted" type="BOOLEAN" defaultValueBoolean="false"><constraints nullable="false"/></column>
         </createTable>
         <addUniqueConstraint tableName="case_batches" columnNames="package_id, batch_number" constraintName="uq_case_batches_number"/>
         <createIndex tableName="case_batches" indexName="idx_case_batches_tenant_package">
@@ -37,7 +38,7 @@
         </rollback>
     </changeSet>
 
-    <changeSet id="088-02-case-batch-files" author="lexavault">
+    <changeSet id="093-02-case-batch-files" author="lexavault">
         <createTable tableName="case_batch_files">
             <column name="id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
             <column name="tenant_id" type="UUID"><constraints nullable="false"/></column>
@@ -63,7 +64,7 @@
         </rollback>
     </changeSet>
 
-    <changeSet id="088-03-document-versions" author="lexavault">
+    <changeSet id="093-03-document-versions" author="lexavault">
         <addColumn tableName="documents">
             <column name="batch_id" type="UUID"/>
             <column name="lineage_id" type="UUID"/>
@@ -91,7 +92,7 @@
     </changeSet>
 
     <!-- Data only: every existing case is its own batch 1; each document version 1 of its own lineage. -->
-    <changeSet id="088-04-existing-cases-are-batch-one" author="lexavault">
+    <changeSet id="093-04-existing-cases-are-batch-one" author="lexavault">
         <sql>
             INSERT INTO case_batches (id, tenant_id, package_id, batch_number, source, received_at, export_cycle, state)
             SELECT p.id, p.tenant_id, p.id, 1, 'EXISTING', p.created_at,
@@ -111,17 +112,51 @@
         </rollback>
     </changeSet>
 
+    <!--
+        Owner 2026-11-28 09:45 (decision (a)): a batch for a contract whose files and case-field values were already
+        deleted still joins the same case. The contract is matched by a keyed fingerprint of its key case fields (primary
+        and required), made with the entity's fingerprint key like the other keyed fingerprints; never a plain hash and
+        never a readable value. It goes when the case itself goes (on delete cascade). Before 093-05 so its comments find it.
+    -->
+    <changeSet id="093-06-case-contract-keys" author="lexavault">
+        <createTable tableName="case_contract_keys">
+            <column name="id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="tenant_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="package_id" type="UUID">
+                <constraints nullable="false" foreignKeyName="fk_case_contract_keys_package"
+                             referencedTableName="document_packages" referencedColumnNames="id" deleteCascade="true"/>
+            </column>
+            <column name="key_fingerprint" type="VARCHAR(200)"><constraints nullable="false"/></column>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+        </createTable>
+        <addUniqueConstraint tableName="case_contract_keys" columnNames="package_id, key_fingerprint"
+                             constraintName="uq_case_contract_keys_package_key"/>
+        <createIndex tableName="case_contract_keys" indexName="idx_case_contract_keys_lookup">
+            <column name="tenant_id"/><column name="key_fingerprint"/>
+        </createIndex>
+        <rollback>
+            <dropTable tableName="case_contract_keys"/>
+        </rollback>
+    </changeSet>
+
     <!-- Task 0118's rule: every new table and column has its meaning in the schema. -->
-    <changeSet id="088-05-comments" author="lexavault" runOnChange="true">
+    <changeSet id="093-05-comments" author="lexavault" runOnChange="true">
+        <setTableRemarks tableName="case_contract_keys" remarks="Keyed fingerprint of a case's key case fields (primary and required), so a batch arriving after the case's files and field values were deleted still joins the same case (task 0104, owner 2026-11-28). Made with the entity's fingerprint key; never a plain hash or a readable value. Deleted with the case."/>
+        <setColumnRemarks tableName="case_contract_keys" columnName="id" remarks="Unique id of the row."/>
+        <setColumnRemarks tableName="case_contract_keys" columnName="tenant_id" remarks="The entity (tenant) the case belongs to."/>
+        <setColumnRemarks tableName="case_contract_keys" columnName="package_id" remarks="The case (document_packages.id) the contract belongs to."/>
+        <setColumnRemarks tableName="case_contract_keys" columnName="key_fingerprint" remarks="Keyed fingerprint (key version and MAC) of the key case-field values, normalised; one row per key version used."/>
+        <setColumnRemarks tableName="case_contract_keys" columnName="created_at" remarks="When the fingerprint was recorded."/>
         <setTableRemarks tableName="case_batches" remarks="One arrival of files into a case (task 0104): a case is the contract, and each later delivery of documents for it is its next batch, processed and delivered on its own."/>
         <setColumnRemarks tableName="case_batches" columnName="id" remarks="Unique id of the batch. For a case from before batches, the case's own id."/>
         <setColumnRemarks tableName="case_batches" columnName="tenant_id" remarks="The entity (tenant) the batch belongs to."/>
         <setColumnRemarks tableName="case_batches" columnName="package_id" remarks="The case (document_packages.id) the batch arrived into."/>
         <setColumnRemarks tableName="case_batches" columnName="batch_number" remarks="Order of the batch within its case, from 1."/>
-        <setColumnRemarks tableName="case_batches" columnName="source" remarks="How the batch arrived: WATCHED_FOLDER, API, POLLING, SCAN or UPLOAD; EXISTING for a case from before batches (migration 088); FIRST for a case's first arrival recorded when its second batch came."/>
+        <setColumnRemarks tableName="case_batches" columnName="source" remarks="How the batch arrived: WATCHED_FOLDER, API, POLLING, SCAN or UPLOAD; EXISTING for a case from before batches (migration 093); FIRST for a case's first arrival recorded when its second batch came."/>
         <setColumnRemarks tableName="case_batches" columnName="received_at" remarks="When the batch arrived."/>
         <setColumnRemarks tableName="case_batches" columnName="export_cycle" remarks="The export cycle of the case that delivered this batch; empty until it is delivered."/>
         <setColumnRemarks tableName="case_batches" columnName="state" remarks="RECEIVED until the batch is delivered, then DELIVERED; NOTHING_NEW for a batch of exact copies only (kept for the history, nothing processed or delivered)."/>
+        <setColumnRemarks tableName="case_batches" columnName="earlier_files_deleted" remarks="True when the files of the case's earlier batches had already been deleted by retention when this batch arrived (owner 2026-11-28); the case history says so."/>
 
         <setTableRemarks tableName="case_batch_files" remarks="Every file of every batch and what it was (new document, new version, possible version or skipped exact copy). Kept for the life of the case, also after the original is purged, so a file arriving months later is still compared against every version ever received. Hashes only, never a file name or content."/>
         <setColumnRemarks tableName="case_batch_files" columnName="id" remarks="Unique id of the received-file record."/>

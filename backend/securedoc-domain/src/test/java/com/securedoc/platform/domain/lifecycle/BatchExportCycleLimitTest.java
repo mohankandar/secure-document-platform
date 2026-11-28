@@ -70,12 +70,26 @@ class BatchExportCycleLimitTest {
                 life.originalDeleteAt().orElseThrow(), "the keep period runs from the last delivery");
     }
 
+    /** Owner 2026-11-28 (was "a purged case takes no batch"): the batch joins; its own delivery sets a new keep period. */
     @Test
-    void aPurgedCaseTakesNoNextBatch() {
+    void aCaseWhoseFilesWereDeletedTakesItsNextBatchWithItsOwnKeepPeriod() {
         PackageLifecycle life = PackageLifecycle.create(PackageId.generate(), tenant);
-        life.recordSuccessfulExport(1, Instant.now(), policy);
-        life.markFinalPurged(Instant.now());
-        assertThrows(IllegalStateException.class, () -> life.startNextBatch(Instant.now()));
+        Instant delivered = Instant.parse("2026-01-01T00:00:00Z");
+        life.recordSuccessfulExport(1, delivered, policy);
+        Instant purged = delivered.plus(java.time.Duration.ofDays(7));
+        life.markFinalPurged(purged);
+
+        Instant monthLater = delivered.plus(java.time.Duration.ofDays(31));
+        assertTrue(life.startNextBatch(monthLater), "the earlier files were deleted");
+        assertTrue(life.purgedAt().isEmpty());
+        assertFalse(life.isFinalPurgeDue(monthLater.plus(java.time.Duration.ofDays(400))),
+                "never purged while the new batch is processing or in Review");
+
+        Instant secondDelivery = monthLater.plusSeconds(3600);
+        life.recordSuccessfulExport(2, secondDelivery, policy, 1);
+        assertEquals(secondDelivery.plus(java.time.Duration.ofHours(policy.originalRetentionHours())),
+                life.originalDeleteAt().orElseThrow());
+        assertFalse(life.startNextBatch(secondDelivery.plusSeconds(60)), "nothing deleted this time");
     }
 
     @Test

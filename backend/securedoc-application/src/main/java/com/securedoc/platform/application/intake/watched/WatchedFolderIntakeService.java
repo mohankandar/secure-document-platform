@@ -128,6 +128,18 @@ public final class WatchedFolderIntakeService implements ScanWatchedFolderUseCas
         return this;
     }
 
+    /** As above, with the contract's keyed fingerprints, so a drop still finds a case whose values were erased. */
+    public WatchedFolderIntakeService withBatches(com.securedoc.platform.application.intake.batch.CaseBatchIntake batches,
+            java.util.function.BiFunction<com.securedoc.platform.domain.identity.TenantId, Map<String, String>, java.util.UUID> recordFor,
+            java.util.function.BiFunction<com.securedoc.platform.domain.identity.TenantId, Map<String, String>, List<String>> contractKeys) {
+        withBatches(batches, recordFor);
+        this.contractKeys = Objects.requireNonNull(contractKeys);
+        return this;
+    }
+
+    private java.util.function.BiFunction<com.securedoc.platform.domain.identity.TenantId, Map<String, String>, List<String>>
+            contractKeys = (tenant, fields) -> List.of();
+
     private com.securedoc.platform.application.intake.batch.CaseBatchIntake batches;
     private java.util.function.BiFunction<com.securedoc.platform.domain.identity.TenantId, Map<String, String>, java.util.UUID>
             recordFor;
@@ -240,7 +252,7 @@ public final class WatchedFolderIntakeService implements ScanWatchedFolderUseCas
                 if (!leaseStillCurrent(scanLease)) continue;
                 duplicates++;
                 record(principal,candidate,IntakeObservationStatus.DUPLICATE,IntakeRejectionCode.DUPLICATE_INTAKE,
-                        fingerprint,null,correlationId,null);
+                        fingerprint,duplicate.caseId,correlationId,null);
                 applyDispositionBestEffort(candidate.sourceReference(), IntakeDisposition.DUPLICATE, scanLease);
                 continue;
             } catch (LicenseEnforcementException stoppedMeanwhile) {
@@ -336,26 +348,34 @@ public final class WatchedFolderIntakeService implements ScanWatchedFolderUseCas
     private Optional<PackageId> joinOpenCase(AuthenticatedPrincipal principal, WatchedFolderCandidate candidate,
                                              CorrelationId correlationId, WatchedFolderScanLease scanLease) {
         if (batches == null || recordFor == null) return Optional.empty();
-        java.util.UUID record = recordFor.apply(principal.tenantId(), candidate.businessIdentifiers());
-        Optional<DocumentPackage> open = batches.openCase(principal.tenantId(), record);
+        var contract = new com.securedoc.platform.application.intake.batch.CaseBatchIntake.Contract(
+                recordFor.apply(principal.tenantId(), candidate.businessIdentifiers()),
+                contractKeys.apply(principal.tenantId(), candidate.businessIdentifiers()));
+        Optional<DocumentPackage> open = batches.openCase(principal.tenantId(), contract);
         if (open.isEmpty()) return Optional.empty();
-        if (com.securedoc.platform.application.intake.batch.CaseBatchIntake.busy(open.get())) {
-            throw new CaseBusyException();
+        if (!com.securedoc.platform.application.intake.batch.CaseBatchIntake.busy(open.get())) {
+            if (candidate.documents().size() > CaseLimits.MAX_FILES_PER_CASE) {
+                throw new com.securedoc.platform.application.exception.ValidationException(
+                        com.securedoc.platform.domain.error.LvErrorCode.INT_029, "The folder drop has more than "
+                        + CaseLimits.MAX_FILES_PER_CASE + " files");
+            }
+            checkEveryFile(candidate);
         }
-        if (candidate.documents().size() > CaseLimits.MAX_FILES_PER_CASE) {
-            throw new com.securedoc.platform.application.exception.ValidationException(
-                    com.securedoc.platform.domain.error.LvErrorCode.INT_029, "The folder drop has more than "
-                    + CaseLimits.MAX_FILES_PER_CASE + " files");
-        }
-        checkEveryFile(candidate);
         requireCurrentLease(scanLease);
         var files = candidate.documents().stream()
                 .map(d -> new com.securedoc.platform.application.intake.batch.CaseBatchIntake.IncomingFile(
                         d.fileName(), d.mimeType(), d.content(), null, null))
                 .toList();
-        var result = batches.join(principal, open.get(), "WATCHED_FOLDER", files, correlationId);
+        var result = batches.join(principal, open.get(), "WATCHED_FOLDER", files, correlationId, contract);
         if (result.kind() == com.securedoc.platform.application.intake.batch.CaseBatchIntake.Kind.BUSY) {
             throw new CaseBusyException();
+        }
+        if (result.kind() == com.securedoc.platform.application.intake.batch.CaseBatchIntake.Kind.ALL_COPIES) {
+            // Owner 2026-11-28: every file was received before (also months ago, after its files were deleted): the
+            // existing "already received" path (LV-INT-017), counted where duplicates are counted.
+            log.info("WATCHED_FOLDER_DROP_ALL_COPIES drop={} packageId={} files={}", dropReference(candidate),
+                    result.packageId(), result.skipped());
+            throw new DuplicateCandidateException(result.packageId());
         }
         log.info("WATCHED_FOLDER_DROP_JOINED_CASE drop={} packageId={} batch={} processed={} skipped={}",
                 dropReference(candidate), result.packageId(), result.batchNumber(), result.processed(), result.skipped());
@@ -734,7 +754,18 @@ public final class WatchedFolderIntakeService implements ScanWatchedFolderUseCas
     private record CandidateDocument(WatchedFolderDocument document, DocumentSignature signature) {}
     private record DocumentSignature(String fileName, String mimeType, long sizeBytes, String sha256) {}
 
-    private static final class DuplicateCandidateException extends RuntimeException {}
+    private static final class DuplicateCandidateException extends RuntimeException {
+        /** The case the drop's files were all received for before (task 0104), or null. */
+        private final PackageId caseId;
+
+        private DuplicateCandidateException() {
+            this(null);
+        }
+
+        private DuplicateCandidateException(PackageId caseId) {
+            this.caseId = caseId;
+        }
+    }
     /** Task 0104: the contract's open case is busy with another batch; the drop waits. */
     private static final class CaseBusyException extends RuntimeException {}
     private static final class LostScanLeaseException extends RuntimeException {}

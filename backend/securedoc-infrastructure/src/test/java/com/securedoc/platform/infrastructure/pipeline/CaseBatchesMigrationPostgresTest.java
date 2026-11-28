@@ -14,7 +14,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Task 0104: migration 088 makes every existing case its own batch 1 and each of its documents version 1 of its own
+ * Task 0104: migration 093 makes every existing case its own batch 1 and each of its documents version 1 of its own
  * lineage, with the file's fingerprint kept. Run as on an existing database: the data change set is forgotten, the rows
  * are written, the changelog runs again.
  */
@@ -23,7 +23,7 @@ class CaseBatchesMigrationPostgresTest {
 
     @Test
     void anExistingCaseIsBatchOneAndItsDocumentsAreVersionOne() throws Exception {
-        try (PostgresTestDatabase db = PostgresTestDatabase.migrated("m088")) {
+        try (PostgresTestDatabase db = PostgresTestDatabase.migrated("m093")) {
             NamedParameterJdbcTemplate jdbc = db.jdbc();
             TenantId tenant = TenantId.generate();
             TestRows.tenant(jdbc, tenant);
@@ -40,7 +40,7 @@ class CaseBatchesMigrationPostgresTest {
                     """, new MapSqlParameterSource("id", doc).addValue("tenant", tenant.value()).addValue("pkg", pkg)
                     .addValue("sum", "AB".repeat(32)));
 
-            jdbc.getJdbcOperations().update("DELETE FROM databasechangelog WHERE id = '088-04-existing-cases-are-batch-one'");
+            jdbc.getJdbcOperations().update("DELETE FROM databasechangelog WHERE id = '093-04-existing-cases-are-batch-one'");
             jdbc.getJdbcOperations().update("DELETE FROM case_batch_files");
             jdbc.getJdbcOperations().update("DELETE FROM case_batches");
             try (Connection connection = db.connection()) {

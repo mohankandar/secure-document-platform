@@ -118,20 +118,35 @@ class CaseBatchIntakeTest {
         assertTrue(store.recorded.stream().allMatch(f -> f.outcome() == Outcome.NEW_DOCUMENT));
     }
 
+    /** Owner 2026-11-28 09:45: every file received before: refused as "already received" (the intake's LV-INT-017). */
     @Test
-    void theSamePackageResentIsRecordedAndSkippedAndNothingIsProcessedOrCounted() {
+    void theSamePackageResentIsAllCopiesAndNothingIsWrittenProcessedOrCounted() {
         deliveredCase(PackageStatus.COMPLETED);
+        int batchesBefore = store.batches.size();
         CaseBatchIntake.Result r = intake.join(principal, delivered, "WATCHED_FOLDER",
                 List.of(file("contract-copy.pdf", "contract v1")), cid());
-        assertEquals(CaseBatchIntake.Kind.NOTHING_NEW, r.kind());
+        assertEquals(CaseBatchIntake.Kind.ALL_COPIES, r.kind());
+        assertEquals(delivered.id(), r.packageId());
         assertEquals(1, r.skipped());
         assertEquals(0, r.processed());
         verify(upload, never()).execute(any(), any());
         verify(submit, never()).execute(any(), any());
         assertEquals(PackageStatus.COMPLETED, delivered.status());
-        assertEquals(Outcome.SKIPPED_IDENTICAL, store.recorded.getFirst().outcome(), "kept in the case's history");
-        assertEquals(firstDocument, store.recorded.getFirst().documentId(), "skipped for the identical document");
-        assertTrue(store.nothingNew.contains(store.batches.getLast().id()), "a batch of copies is never delivered");
+        assertTrue(store.recorded.isEmpty(), "nothing recorded: the intake refuses it");
+        assertEquals(batchesBefore, store.batches.size(), "no batch opened");
+    }
+
+    /** A copy and a changed file: the copy is skipped and recorded, the changed one is processed (owner 2026-11-28). */
+    @Test
+    void aBatchWithACopyAndAChangedFileProcessesOnlyTheChangedOne() {
+        deliveredCase(PackageStatus.COMPLETED);
+        CaseBatchIntake.Result r = intake.join(principal, delivered, "WATCHED_FOLDER",
+                List.of(file("contract-copy.pdf", "contract v1"), file("contract.pdf", "contract v1, corrected")), cid());
+        assertEquals(CaseBatchIntake.Kind.JOINED, r.kind());
+        assertEquals(1, r.skipped());
+        assertEquals(1, r.processed());
+        assertEquals(java.util.List.of(Outcome.SKIPPED_IDENTICAL, Outcome.NEW_VERSION),
+                store.recorded.stream().map(CaseBatchStore.ReceivedFile::outcome).toList());
     }
 
     @Test

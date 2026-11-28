@@ -459,11 +459,14 @@ public class ApplicationServiceConfig {
             IntakeLicence intakeLicence,
             PackageRepository packageRepository,
             DomainEventPublisher eventPublisher,
-            AuditService auditService) {
+            AuditService auditService,
+            com.securedoc.platform.application.port.out.CaseBatchStore caseBatchStore) {
         return new CreatePackageService(
                 tenantContextService, capabilityEnforcementService, caseFields, intakeLicence,
                 packageRepository, eventPublisher, auditService).withPriorities(casePriorityService)
                 .withInstructions(caseInstructionsService)
+                // Task 0104: the contract's keyed fingerprint stays with the case after its values are erased.
+                .withContractKeys(caseBatchStore)
                 // Task 0061: the case's values and the case are stored together or not at all.
                 .withUnit(new CreatePackageService.Unit() {
                     private final org.springframework.transaction.support.TransactionTemplate template =
@@ -504,7 +507,8 @@ public class ApplicationServiceConfig {
                 .withGate(intakeGate).withCaseFields(caseFields)
                 .withFileCheck(pdfIntakeValidationPort).withDashboardVisibility(packageDashboardVisibilityPort)
                 .withBatches(caseBatchIntake,
-                        (tenant, fields) -> caseFields.resolveOrCreate(tenant, fields).businessRecordId().value());
+                        (tenant, fields) -> caseFields.resolveOrCreate(tenant, fields).businessRecordId().value(),
+                        caseFields::contractKeys);
     }
 
     /** Task 0104: an arrival for a contract with an open case joins it as the next batch. */
@@ -515,10 +519,11 @@ public class ApplicationServiceConfig {
             com.securedoc.platform.application.port.out.PackageLifecycleRepository packageLifecycleRepository,
             UploadDocumentUseCase uploadDocumentUseCase,
             SubmitPackageUseCase submitPackageUseCase,
-            com.securedoc.platform.application.port.out.PdfFileIdentityPort pdfFileIdentityPort) {
+            com.securedoc.platform.application.port.out.PdfFileIdentityPort pdfFileIdentityPort,
+            PackageDashboardVisibilityPort packageDashboardVisibilityPort) {
         return new com.securedoc.platform.application.intake.batch.CaseBatchIntake(caseBatchStore, packageRepository,
                 packageLifecycleRepository, uploadDocumentUseCase, submitPackageUseCase, pdfFileIdentityPort,
-                java.time.Clock.systemUTC());
+                java.time.Clock.systemUTC()).withVisibility(packageDashboardVisibilityPort);
     }
 
     /** Task 0021: the watched folder's sensitivity level, set by Tenant IT. */

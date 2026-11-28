@@ -261,6 +261,35 @@ class CaseFieldServiceTest {
         }
     }
 
+    /**
+     * Task 0104 (owner 2026-11-28): the contract's keyed fingerprint. The same key fields give the same one (as the
+     * values are normalised); any key field different gives another; another entity gives another; it never holds a
+     * value; without a key service, or with a key field missing, there is none.
+     */
+    @Test
+    void theContractKeyIsKeyedNormalisedPerEntityAndHoldsNoValue() {
+        CaseFieldService service = text();
+        List<String> key = service.contractKeys(tenant, contract("C-100", "M-200", "000"));
+        assertFalse(key.isEmpty());
+        assertEquals(key, service.contractKeys(tenant, contract("c-100", "m-200", "000")), "normalised like the values");
+        assertNotEquals(key.getFirst(), service.contractKeys(tenant, contract("C-100", "M-201", "000")).getFirst(),
+                "one key field different: another contract");
+        assertTrue(key.stream().noneMatch(k -> k.contains("C-100") || k.contains("M-200")), "no value in it");
+        assertTrue(service.contractKeys(tenant, Map.of("contract_number", "C-100")).isEmpty(), "a key field missing");
+
+        TenantId otherEntity = TenantId.generate();
+        fields.add(otherEntity, upper("contract_number", "Contract Number", 1).required(true).primary(true));
+        fields.add(otherEntity, upper("member_number", "Member Number", 2).required(true));
+        fields.add(otherEntity, upper("service_entity", "Service Entity", 3).required(true));
+        assertNotEquals(key.getFirst(), service.contractKeys(otherEntity, contract("C-100", "M-200", "000")).getFirst(),
+                "keyed per entity");
+
+        TestCaseFields noKeys = new TestCaseFields(false);
+        noKeys.add(tenant, upper("contract_number", "Contract Number", 1).required(true).primary(true));
+        assertTrue(noKeys.service().contractKeys(tenant, Map.of("contract_number", "C-100")).isEmpty(),
+                "never a plain hash without a key service");
+    }
+
     private static Map<String, String> contract(String contract, String member, String service) {
         return Map.of("contract_number", contract, "member_number", member, "service_entity", service);
     }

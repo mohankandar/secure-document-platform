@@ -86,7 +86,7 @@ class JdbcCaseBatchStorePostgresTest {
     }
 
     @Test
-    void theOpenCaseOfAContractIsTheNewestNotRejectedCancelledOrErased() throws Exception {
+    void theOpenCaseOfAContractIsTheNewestNotRejectedOrCancelledAlsoAfterItsFilesWereDeleted() throws Exception {
         try (PostgresTestDatabase db = PostgresTestDatabase.migrated("cbsopen")) {
             NamedParameterJdbcTemplate jdbc = db.jdbc();
             TenantId tenant = TenantId.generate();
@@ -102,19 +102,67 @@ class JdbcCaseBatchStorePostgresTest {
 
             pkg(jdbc, tenant, record, "REJECTED", "2026-11-02T10:00:00Z");
             pkg(jdbc, tenant, record, "CANCELLED", "2026-11-03T10:00:00Z");
-            UUID erased = pkg(jdbc, tenant, record, "COMPLETED", "2026-11-04T10:00:00Z");
-            jdbc.update("INSERT INTO package_lifecycles (package_id, tenant_id, successful_export_cycles, purged_at, updated_at) VALUES (:p, :t, 1, now(), now())",
-                    new MapSqlParameterSource("p", erased).addValue("t", tenant.value()));
             assertEquals(delivered, store.openCaseFor(tenant, record).orElseThrow().value(),
-                    "a rejected, cancelled or erased case takes no batch");
+                    "a rejected or cancelled case takes no batch");
+            // Owner 2026-11-28 (decision (a)): a case whose files were deleted by retention still takes the next batch.
+            UUID purged = pkg(jdbc, tenant, record, "COMPLETED", "2026-11-04T10:00:00Z");
+            jdbc.update("INSERT INTO package_lifecycles (package_id, tenant_id, successful_export_cycles, purged_at, updated_at) VALUES (:p, :t, 1, now(), now())",
+                    new MapSqlParameterSource("p", purged).addValue("t", tenant.value()));
+            assertEquals(purged, store.openCaseFor(tenant, record).orElseThrow().value());
+            UUID delivered2 = purged;
 
             pkg(jdbc, tenant, UUID.randomUUID(), "COMPLETED", "2026-11-05T10:00:00Z");
             pkg(jdbc, other, record, "COMPLETED", "2026-11-06T10:00:00Z");
-            assertEquals(delivered, store.openCaseFor(tenant, record).orElseThrow().value(), "never another contract or entity");
+            assertEquals(delivered2, store.openCaseFor(tenant, record).orElseThrow().value(), "never another contract or entity");
             assertTrue(store.openCaseFor(tenant, null).isEmpty());
         }
     }
 
+
+    /**
+     * Owner 2026-11-28: a contract whose case-field values were erased is still found by its keyed fingerprint (any key
+     * version), never another entity's; the fingerprint is kept once per case and goes when the case goes; the batch
+     * history can say the earlier files were deleted.
+     */
+    @Test
+    void aContractIsFoundByItsKeyedFingerprintAfterItsValuesAreGoneAndTheFingerprintGoesWithTheCase() throws Exception {
+        try (PostgresTestDatabase db = PostgresTestDatabase.migrated("cbskey")) {
+            NamedParameterJdbcTemplate jdbc = db.jdbc();
+            TenantId tenant = TenantId.generate();
+            TenantId other = TenantId.generate();
+            TestRows.tenant(jdbc, tenant);
+            TestRows.tenant(jdbc, other);
+            JdbcCaseBatchStore store = new JdbcCaseBatchStore(jdbc);
+            UUID erasedRecord = UUID.randomUUID();
+            UUID kase = pkg(jdbc, tenant, erasedRecord, "COMPLETED", "2026-10-01T10:00:00Z");
+            UUID othersCase = pkg(jdbc, other, UUID.randomUUID(), "COMPLETED", "2026-10-02T10:00:00Z");
+
+            assertTrue(store.openCaseForContract(tenant, List.of("1:mac-a")).isEmpty());
+            store.rememberContract(tenant, PackageId.of(kase), "1:mac-a");
+            store.rememberContract(tenant, PackageId.of(kase), "1:mac-a");
+            store.rememberContract(other, PackageId.of(othersCase), "1:mac-b");
+            store.rememberContract(other, PackageId.of(kase), "1:mac-c"); // another entity's call never writes on this case
+            assertEquals(1, jdbc.queryForObject("SELECT count(*) FROM case_contract_keys WHERE package_id = :p",
+                    new MapSqlParameterSource("p", kase), Integer.class), "once per case and key version");
+
+            assertEquals(kase, store.openCaseForContract(tenant, List.of("2:mac-new", "1:mac-a")).orElseThrow().value(),
+                    "found by an older key version");
+            assertTrue(store.openCaseForContract(tenant, List.of("1:mac-b")).isEmpty(), "never another entity's case");
+            assertTrue(store.openCaseForContract(tenant, List.of()).isEmpty());
+            jdbc.update("UPDATE document_packages SET status = 'REJECTED' WHERE id = :p", new MapSqlParameterSource("p", kase));
+            assertTrue(store.openCaseForContract(tenant, List.of("1:mac-a")).isEmpty(), "a rejected case takes no batch");
+
+            CaseBatchStore.Batch batch = store.openBatch(tenant, PackageId.of(kase), "WATCHED_FOLDER", Instant.now());
+            store.markEarlierFilesDeleted(tenant, batch.id());
+            assertEquals(Boolean.TRUE, jdbc.queryForObject("SELECT earlier_files_deleted FROM case_batches WHERE id = :b",
+                    new MapSqlParameterSource("b", batch.id()), Boolean.class));
+
+            jdbc.update("DELETE FROM case_batches WHERE package_id = :p", new MapSqlParameterSource("p", kase));
+            jdbc.update("DELETE FROM document_packages WHERE id = :p", new MapSqlParameterSource("p", kase));
+            assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM case_contract_keys WHERE package_id = :p",
+                    new MapSqlParameterSource("p", kase), Integer.class), "the fingerprint goes with the case");
+        }
+    }
     @Test
     void theCurrentBatchScopesTheExportAndItsCycleLimit() throws Exception {
         // Task 0104, step 3: a case of one batch delivers every document; a later batch only its own, and the cycles that
@@ -154,7 +202,7 @@ class JdbcCaseBatchStorePostgresTest {
         }
     }
 
-    /** A case made by an intake without batches (after migration 088): its documents become batch 1 when batch 2 comes. */
+    /** A case made by an intake without batches (after migration 093): its documents become batch 1 when batch 2 comes. */
     @Test
     void aCaseMadeWithoutBatchesAdoptsItsDocumentsAsBatchOneWhenTheNextBatchComes() throws Exception {
         try (PostgresTestDatabase db = PostgresTestDatabase.migrated("cbs3")) {

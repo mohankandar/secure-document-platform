@@ -21,7 +21,7 @@ public final class DocumentPackage {
     private final PackageId id;
     private final TenantId tenantId;
     private final PackageType packageType;
-    private final BusinessRecordId businessRecordId;
+    private BusinessRecordId businessRecordId;
     private final String intakeFingerprint;
     private final String sourceReference;
     private final ActorId submittedBy;
@@ -220,6 +220,20 @@ public final class DocumentPackage {
      */
     public boolean takesNextBatchNow() {
         return status == PackageStatus.COMPLETED;
+    }
+
+    /**
+     * Task 0104 (owner 2026-11-28): the case of a contract whose earlier case-field values were erased takes the record its
+     * joining batch's values were stored in, so it shows and delivers them. Only between batches.
+     */
+    public void relinkBusinessRecord(BusinessRecordId record) {
+        Objects.requireNonNull(record, "record");
+        if (!takesNextBatchNow()) {
+            throw new com.securedoc.platform.domain.error.CodedStateException(LvErrorCode.INT_026,
+                    "The case can't take a new batch in status: " + status);
+        }
+        businessRecordId = record;
+        updatedAt = Instant.now();
     }
 
     /** Task 0104: adds a document (a new document or a new version) of the next batch to a delivered case. */
