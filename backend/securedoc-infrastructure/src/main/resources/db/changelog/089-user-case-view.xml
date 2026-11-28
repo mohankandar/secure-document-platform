@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!--
+        Task 0108 (owner approved, "Cases at volume"): each person's View menu on the Cases page, per entity: sort, order,
+        columns and density. Kept on the server, so it follows the person to another browser. Field keys and names only,
+        never a value. 088 is taken by task 0110 (queue A).
+
+        Included after 087 in the master changelog, not at its end, so the roll-back tests that count change sets from the
+        end need no new count.
+    -->
+    <changeSet id="089-01-user-case-view" author="lexavault">
+        <createTable tableName="user_case_view">
+            <column name="tenant_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="actor_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="sort_key" type="VARCHAR(120)"><constraints nullable="false"/></column>
+            <column name="sort_order" type="VARCHAR(4)"><constraints nullable="false"/></column>
+            <!-- Null: the default columns. Otherwise the chosen keys, joined by a line feed. -->
+            <column name="columns_list" type="TEXT"/>
+            <column name="density" type="VARCHAR(16)"><constraints nullable="false"/></column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+        </createTable>
+        <addPrimaryKey tableName="user_case_view" columnNames="tenant_id, actor_id" constraintName="pk_user_case_view"/>
+        <addForeignKeyConstraint baseTableName="user_case_view" baseColumnNames="tenant_id"
+                                 referencedTableName="tenants" referencedColumnNames="id"
+                                 constraintName="fk_user_case_view_tenant"/>
+        <sql>
+            alter table user_case_view add constraint ck_user_case_view_order check (sort_order in ('asc', 'desc'));
+            alter table user_case_view add constraint ck_user_case_view_density check (density in ('compact', 'comfortable'));
+        </sql>
+        <rollback>
+            <dropTable tableName="user_case_view"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

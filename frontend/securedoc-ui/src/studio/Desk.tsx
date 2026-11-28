@@ -6,7 +6,7 @@ import {
   CAP, CASE_TILES, SOURCE_LABEL, STAGES, caseTitle, needsYou, openFindingsByPackage, relativeTime, stageLabel, stageOf, tileOf,
   useCaseFields, usePackages, useReviewQueue, useSensitiveMatches, type StageKey,
 } from './data';
-import { CASE_GROUPS, NAV, STAGE_NAMES, caseSearchPlaceholders, firstThatFits, priorityName, priorityRank } from './words';
+import { CASE_GROUPS, NAV, STAGE_NAMES, caseSearchPlaceholders, firstThatFits, priorityName } from './words';
 import { ExportChip, Kbd, Notice, Spinner, StageChip } from './atoms';
 import { isLvCode, lvLabel } from './lvCodes';
 import { exportNextStep, exportStateOf, exportStatusLabel, isExporting } from './exportRules';
@@ -19,6 +19,8 @@ import { CONFIRM_COPY, useCaseActionRunner } from './caseActionRunner';
 import { ConfirmDialog } from './admin/shared';
 import { CASES_KEY_ZONE, TYPING_OR_DIALOG } from './shortcuts';
 import { LvText } from './help/LvCodeLink';
+import CaseViewMenu from './CaseViewMenu';
+import { caseComparator, shownColumns, sortLabel, useCaseView } from './caseView';
 
 type Filter = 'all' | 'you' | StageKey;
 
@@ -83,7 +85,19 @@ export default function Desk({ caps }: { caps: string[] }) {
     return { byStage, you: all.filter((p) => needsYou(p, caps)).length };
   }, [all, caps]);
 
+  // Task 0108: the View menu (sort, order, columns, density), saved on the server with the person.
+  const caseView = useCaseView(true);
+  const { settings: viewSettings } = caseView;
+  const labels = useMemo(() => {
+    const byKey = new Map<string, string>();
+    for (const p of all) for (const i of p.businessIdentifiers) if (!byKey.has(i.key)) byKey.set(i.key, i.label);
+    return byKey;
+  }, [all]);
+  const fieldLabel = (key: string) => labels.get(key) ?? key;
+  const columns = useMemo(() => shownColumns(viewSettings, caseView.view?.options.columns), [viewSettings, caseView.view]);
+
   const sensitiveMatches = useSensitiveMatches(query, caps);
+  const compare = useMemo(() => caseComparator(viewSettings), [viewSettings]);
   const groups = useMemo<Group[]>(() => {
     const q = query.trim().toLowerCase();
     const matches = all
@@ -91,11 +105,10 @@ export default function Desk({ caps }: { caps: string[] }) {
       .filter((p) => !code || p.stopReasonCode === code)
       .filter((p) => filter === 'all' || (filter === 'you' ? needsYou(p, caps) : tileOf(p) === filter))
       .sort((a, b) => {
-        // Task 0073: what waits for a person is Urgent, Normal, Low, the oldest first; the rest is newest first.
+        // Task 0108: what waits for a person comes first; inside each group, the person's chosen sort (View menu).
         const [youA, youB] = [needsYou(a, caps), needsYou(b, caps)];
         if (youA !== youB) return youA ? -1 : 1;
-        if (youA) return priorityRank(a.priority) - priorityRank(b.priority) || +new Date(a.createdAt) - +new Date(b.createdAt);
-        return +new Date(b.updatedAt) - +new Date(a.updatedAt);
+        return compare(a, b);
       });
 
     if (filter !== 'all') {
@@ -109,7 +122,7 @@ export default function Desk({ caps }: { caps: string[] }) {
       { key: 'stopped', title: CASE_GROUPS.stopped, cases: rest.filter((p) => tileOf(p) === 'stopped') },
       { key: 'delivered', title: CASE_GROUPS.delivered, cases: rest.filter((p) => tileOf(p) === 'delivered') },
     ].filter((g) => g.cases.length > 0);
-  }, [all, caps, code, filter, query, sensitiveMatches]);
+  }, [all, caps, code, compare, filter, query, sensitiveMatches]);
 
   // Task 0076: bulk approval, only in the Approval stage.
   const waiting = useMemo(() => (filter === 'approval' ? groups.flatMap((g) => g.cases) : []).filter((p) => p.status === 'PENDING_FINAL_APPROVAL' && !isExporting(exportStateOf(p.exportState))), [filter, groups]);
@@ -152,7 +165,7 @@ export default function Desk({ caps }: { caps: string[] }) {
   const deliveredCount = counts.byStage.get('delivered') ?? 0;
 
   return (
-    <div className={`cf-desk${caseId ? ' has-drawer' : ''}`}>
+    <div className={`cf-desk${caseId ? ' has-drawer' : ''}`} data-density={viewSettings.density}>
       <section className="cf-desk-main" aria-labelledby="cf-desk-title">
         <header className="cf-page-head">
           <div>
@@ -190,6 +203,7 @@ export default function Desk({ caps }: { caps: string[] }) {
               <button type="button" className="cf-search-clear" onClick={() => setQuery('')} aria-label="Clear filter"><X size={14} /></button>
             ) : null}
           </label>
+          <CaseViewMenu view={caseView.view} settings={viewSettings} fieldLabel={fieldLabel} onSave={caseView.save} />
         </div>
 
         {code && (
@@ -219,10 +233,11 @@ export default function Desk({ caps }: { caps: string[] }) {
               <h2 id={`cf-group-${group.key}`}>{group.title}</h2>
               <span className="cf-group-count">{group.cases.length.toLocaleString()}</span>
               {group.note && <span className="cf-group-note">{group.note}</span>}
+              {(group.key === 'you' || visible.length === 1) && <span className="cf-group-sort" data-testid={`sorted-${group.key}`}>sorted by {sortLabel(viewSettings.sort, fieldLabel).toLowerCase()}</span>}
             </header>
             <ul className="cf-cases">
               {group.rows.map((pkg) => (
-                <CaseRow key={pkg.packageId} pkg={pkg} caps={caps} open={findings.get(pkg.packageId)?.length ?? 0} selected={pkg.packageId === caseId}
+                <CaseRow key={pkg.packageId} pkg={pkg} caps={caps} columns={columns} open={findings.get(pkg.packageId)?.length ?? 0} selected={pkg.packageId === caseId}
                   bulk={bulk.selection && waiting.includes(pkg) ? bulk.selection : null} />
               ))}
             </ul>
@@ -277,8 +292,9 @@ function LifecycleBand({ counts, active, onSelect }: {
  * One case: the row opens the case panel; the action button at the end (only when this person can act) runs the
  * action with the same confirmation as the case panel and never also opens the panel (UI spec findings 2, 3).
  */
-function CaseRow({ pkg, caps, open, selected, bulk }: { pkg: PackageSummary; caps: string[]; open: number; selected: boolean; bulk: BulkSelection | null }) {
-  const title = caseTitle(pkg.businessIdentifiers);
+function CaseRow({ pkg, caps, columns, open, selected, bulk }: { pkg: PackageSummary; caps: string[]; columns: string[]; open: number; selected: boolean; bulk: BulkSelection | null }) {
+  // Task 0108: the second line shows the case fields the person chose in View > Columns (by default every displayable one).
+  const title = caseTitle(pkg.businessIdentifiers.filter((i) => i.primary || columns.includes(i.key)));
   const stage = stageOf(pkg.status);
   const you = needsYou(pkg, caps);
   // Task 0029: a case with an open export job shows "Exporting · …" instead of its review status, and offers no row
@@ -303,9 +319,16 @@ function CaseRow({ pkg, caps, open, selected, bulk }: { pkg: PackageSummary; cap
         <span className="cf-case-flag" aria-hidden="true" />
         <span className="cf-case-id">
           <span className="cf-case-primary cf-mono">{title.primary}</span>
-          <span className="cf-case-secondary">{title.secondary || '—'}</span>
+          <span className="cf-case-secondary">
+            {title.secondary || (columns.includes('received') ? null : '—')}
+            {/* Task 0108: Received (View > Columns) on the second line, so the row's columns keep their widths. */}
+            {columns.includes('received') && (
+              <>{title.secondary ? ' · ' : ''}<time className="cf-case-received" dateTime={pkg.createdAt}>received {relativeTime(pkg.createdAt)}</time></>
+            )}
+          </span>
         </span>
-        <span className="cf-case-source">{SOURCE_LABEL[pkg.packageType] ?? pkg.packageType}</span>
+        {/* The source slot stays when Source is not chosen, so the columns stay in line. */}
+        <span className="cf-case-source">{columns.includes('source') ? SOURCE_LABEL[pkg.packageType] ?? pkg.packageType : null}</span>
         <span className="cf-case-docs">{pkg.documentCount} {pkg.documentCount === 1 ? 'doc' : 'docs'}</span>
         <span className="cf-case-next" data-stage={stage}>
           {next}

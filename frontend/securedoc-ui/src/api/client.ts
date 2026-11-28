@@ -3,6 +3,7 @@ import { expireOidcSession, isOidcSecurityMode } from './auth';
 import { selectedOidcTenant, oidcTenantContextRevision } from './tenantContext';
 import { beginWrite } from './pendingWork';
 import type { PolicyEstimate } from '../studio/admin/policyRules';
+import type { CaseView, CaseViewSettings } from '../studio/caseView';
 import type {
   CaseExport, DestinationView as ExportDestinationView, NeedsIt, ReachabilityAlert, RetentionSettings, WaitingForYou,
 } from '../studio/exportRules';
@@ -675,6 +676,16 @@ class ApiClient {
    * Task 0111: every case the dashboard shows (the server leaves out the ones it hides), page by page, so the counts are
    * true. Stops at 50 pages (5,000 cases); the server lists them oldest first, in an order stable across pages.
    */
+  /** Task 0108: this person's View menu choices on the Cases page, kept on the server, and what the entity offers. */
+  async getCaseView(): Promise<CaseView> {
+    return this.request('/me/case-view');
+  }
+
+  /** Task 0108: saves the View menu; anything the entity doesn't offer is refused whole (LV-CFG-001). */
+  async saveCaseView(settings: CaseViewSettings): Promise<CaseView> {
+    return this.request('/me/case-view', { method: 'PUT', body: JSON.stringify(settings) });
+  }
+
   async listPackages(): Promise<PackageSummary[]> {
     const pageSize = 100;
     const all: PackageSummary[] = [];
