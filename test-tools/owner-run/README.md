@@ -64,3 +64,11 @@ A file is scored only once it is delivered: LexaVault makes the redacted copy on
 - "the container lexavault-0106-pg exists already": another round is running, one was kept with `--review`, or one was cut off (the laptop slept, the process was killed). End it with `--after` or `--stop`. Ctrl+C or closing the window ends a round cleanly by itself.
 - "port 8080 is in use": stop LexaVault first (`.\Stop-LexaVault-Local.ps1`); only `--review` needs 8080.
 - The run folder (printed at the start, under `%TEMP%\lexavault-0106\`) holds the logs, the delivered files and what each reading found. It holds made-up test values only.
+
+## Update-And-Start and VS Code (task 0120)
+
+`C:\dev\lexavault\Update-And-Start.ps1` refuses to start while VS Code's Java extension (redhat.java, its Java language server) runs: it holds files under `target\` and the build would fail halfway ("Failed to delete ...\target\classes"). It stops before changing anything, with:
+
+> VS Code's Java extension is running and locks build files. Close VS Code (or run 'Java: Clean Java Language Server Workspace' and close it), then run this again.
+
+It never stops that process itself. The check (`scripts\lib\LexaVault-JavaLanguageServer.ps1`, tested by `scripts\testing\Test-LexaVault-JavaLanguageServer.ps1`) runs before the pull and again just before the build. `Run-OwnerRound.cmd` builds nothing (it starts the jar already built), so it has no such check.
