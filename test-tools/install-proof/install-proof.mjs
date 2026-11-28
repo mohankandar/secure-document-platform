@@ -129,7 +129,8 @@ function scanForSecrets() {
     for (const [pattern, what] of SECRET_PATTERNS) {
       const flags = pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`;
       for (const m of text.matchAll(new RegExp(pattern.source, flags))) {
-        if (m[1] && NOT_SECRETS.has(createHash('sha256').update(m[1]).digest('hex'))) continue;
+        const value = m.length > 2 ? m[m.length - 1] : null;
+        if (value && NOT_SECRETS.has(createHash('sha256').update(value).digest('hex'))) continue;
         found.push(`${shown}: ${what}`);
         break;
       }
