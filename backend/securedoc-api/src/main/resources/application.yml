@@ -11,6 +11,12 @@ spring:
   config:
     # Task 0057: setup's platform-tenant.properties (platform.licensing.tenant-id), beside the app unless named.
     import: "${PLATFORM_TENANT_CONFIG:optional:file:./platform-tenant.properties}"
+  # Task 0114: an installed LexaVault changes no table at start: the schema step does that, with the owner account
+  # (docs/install/SCHEMA_STEP.md), and the everyday account could not. Spring's default would run Liquibase. The local
+  # development start turns it on (application-local.yml).
+  liquibase:
+    enabled: false
+    change-log: classpath:db/changelog/db.changelog-master.xml
   # Task 0067: the workers of all stages together stay below these connections (10 are kept for requests). With several
   # servers, the database must allow this many for each.
   datasource:

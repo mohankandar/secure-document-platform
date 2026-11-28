@@ -270,10 +270,54 @@ public final class SchemaStep {
                     granted++;
                 }
             }
+            // Task 0114 (install proof): LexaVault's own tables too, so the app runs with an everyday account. The audit
+            // trail is added to and read, never changed (as migration 088 holds for the schema owner); Liquibase's own
+            // tables get nothing. Sequences: their next values.
+            int app = 0;
+            for (String table : appTables(c)) {
+                if (owns(c, runtimeUser, table)) {
+                    throw new InstallException(2, "RUNTIME_USER_OWNS_TABLES", runtimeUser + " owns " + table
+                            + ": the app's database user must not own the tables. Give another user, or leave out "
+                            + "--runtime-user where the app connects as the schema owner (local development)");
+                }
+                s.execute("revoke all on " + table + " from \"" + runtimeUser + "\"");
+                if (LIQUIBASE_TABLES.contains(table)) continue;
+                s.execute("grant " + APP_NARROWER_RIGHTS.getOrDefault(table, DML) + " on " + table + " to \""
+                        + runtimeUser + "\"");
+                app++;
+            }
+            s.execute("grant usage, select on all sequences in schema " + currentSchema(c) + " to \"" + runtimeUser + "\"");
             c.commit();
-            out.println("  runtime user     rights set on " + granted + " platform tables");
+            out.println("  runtime user     rights set on " + granted + " platform tables and " + app + " LexaVault tables");
         } catch (SQLException e) {
             throw new InstallException(1, "SCHEMA_GRANT_FAILED", "SQL state " + e.getSQLState());
+        }
+    }
+
+    /** Task 0114: Liquibase's own bookkeeping; the app never needs it. */
+    static final java.util.Set<String> LIQUIBASE_TABLES = java.util.Set.of("databasechangelog", "databasechangeloglock");
+
+    /** Task 0114: LexaVault's tables where the app's user gets less than SELECT, INSERT, UPDATE and DELETE. */
+    static final Map<String, String> APP_NARROWER_RIGHTS = Map.of("audit_records", "select, insert");
+
+    /** Task 0114: every table of the schema that is not a platform run's. */
+    private static List<String> appTables(Connection c) throws SQLException {
+        List<String> out = new ArrayList<>();
+        try (PreparedStatement ps = c.prepareStatement("select table_name from information_schema.tables "
+                + "where table_schema = current_schema() and table_type = 'BASE TABLE' order by table_name");
+             ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                String table = rs.getString(1);
+                if (PLATFORM_RUNS.stream().noneMatch(run -> table.startsWith(run.tablePrefix()))) out.add(table);
+            }
+        }
+        return out;
+    }
+
+    private static String currentSchema(Connection c) throws SQLException {
+        try (Statement s = c.createStatement(); ResultSet rs = s.executeQuery("select current_schema()")) {
+            rs.next();
+            return "\"" + rs.getString(1) + "\"";
         }
     }
 
