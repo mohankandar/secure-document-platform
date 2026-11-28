@@ -115,6 +115,23 @@ public final class WatchedFolderIntakeService implements ScanWatchedFolderUseCas
         return this;
     }
 
+    /**
+     * Task 0104: a drop for a contract that has an open case joins it as its next batch (only new documents and new
+     * versions are processed; exact copies are recorded and skipped). Without it every drop makes its own case, as
+     * before. {@code recordFor} gives the case-field record a drop's case fields resolve to (refusing a conflict, as a
+     * new case would).
+     */
+    public WatchedFolderIntakeService withBatches(com.securedoc.platform.application.intake.batch.CaseBatchIntake batches,
+            java.util.function.BiFunction<com.securedoc.platform.domain.identity.TenantId, Map<String, String>, java.util.UUID> recordFor) {
+        this.batches = Objects.requireNonNull(batches);
+        this.recordFor = Objects.requireNonNull(recordFor);
+        return this;
+    }
+
+    private com.securedoc.platform.application.intake.batch.CaseBatchIntake batches;
+    private java.util.function.BiFunction<com.securedoc.platform.domain.identity.TenantId, Map<String, String>, java.util.UUID>
+            recordFor;
+
     /** Task 0067: the same service, taking less while the queue is long and nothing while space is short. */
     public WatchedFolderIntakeService withGate(com.securedoc.platform.application.intake.IntakeGate gate) {
         this.gate = Objects.requireNonNull(gate);
@@ -207,6 +224,18 @@ public final class WatchedFolderIntakeService implements ScanWatchedFolderUseCas
             try {
                 packageId = resolveCreateOrResume(principal, candidate, fingerprint, correlationId, scanLease);
                 requireCurrentLease(scanLease);
+            } catch (CaseBusyException busy) {
+                // Task 0104: the contract's case is processing or in Review: the drop goes back to wait for its turn,
+                // untouched and unrecorded; a later scan takes it once the running batch is delivered.
+                waiting++;
+                log.info("WATCHED_FOLDER_DROP_WAITS_FOR_CASE drop={}", dropReference(candidate));
+                try {
+                    sourcePort.release(candidate.sourceReference(), scanLease);
+                } catch (RuntimeException releaseFailure) {
+                    log.warn("WATCHED_FOLDER_RELEASE_FAILED drop={} exceptionType={}", dropReference(candidate),
+                            releaseFailure.getClass().getSimpleName());
+                }
+                continue;
             } catch (DuplicateCandidateException duplicate) {
                 if (!leaseStillCurrent(scanLease)) continue;
                 duplicates++;
@@ -254,6 +283,13 @@ public final class WatchedFolderIntakeService implements ScanWatchedFolderUseCas
                                             WatchedFolderScanLease scanLease) {
         Optional<DocumentPackage> existing = packageRepository.findByTenantIdAndIntakeFingerprint(
                 principal.tenantId(), fingerprint);
+        if (existing.isPresent() && sameWatchedSource(existing.get(), candidate)) {
+            return resumeExisting(principal, candidate, existing.get(), correlationId, scanLease);
+        }
+        // Task 0104: the contract has an open case: this drop is its next batch (also a resend of the same files, whose
+        // copies are recorded and skipped), never a new case and never refused.
+        Optional<PackageId> joined = joinOpenCase(principal, candidate, correlationId, scanLease);
+        if (joined.isPresent()) return joined.get();
         if (existing.isPresent()) {
             return resumeExisting(principal, candidate, existing.get(), correlationId, scanLease);
         }
@@ -290,6 +326,40 @@ public final class WatchedFolderIntakeService implements ScanWatchedFolderUseCas
         DocumentPackage created = packageRepository.findByIdAndTenantId(createdPackageId, principal.tenantId())
                 .orElseThrow(() -> new IllegalStateException("Created watched-folder package is not readable"));
         return resumeExisting(principal, candidate, created, correlationId, scanLease);
+    }
+
+    /**
+     * Task 0104: joins the drop to its contract's open case as the next batch. Empty when batches are off or the contract
+     * has no open case (a new case is made, as before). A case busy with another batch makes the drop wait
+     * ({@link CaseBusyException}); the drop's files are checked first, as for a new case (all or nothing).
+     */
+    private Optional<PackageId> joinOpenCase(AuthenticatedPrincipal principal, WatchedFolderCandidate candidate,
+                                             CorrelationId correlationId, WatchedFolderScanLease scanLease) {
+        if (batches == null || recordFor == null) return Optional.empty();
+        java.util.UUID record = recordFor.apply(principal.tenantId(), candidate.businessIdentifiers());
+        Optional<DocumentPackage> open = batches.openCase(principal.tenantId(), record);
+        if (open.isEmpty()) return Optional.empty();
+        if (com.securedoc.platform.application.intake.batch.CaseBatchIntake.busy(open.get())) {
+            throw new CaseBusyException();
+        }
+        if (candidate.documents().size() > CaseLimits.MAX_FILES_PER_CASE) {
+            throw new com.securedoc.platform.application.exception.ValidationException(
+                    com.securedoc.platform.domain.error.LvErrorCode.INT_029, "The folder drop has more than "
+                    + CaseLimits.MAX_FILES_PER_CASE + " files");
+        }
+        checkEveryFile(candidate);
+        requireCurrentLease(scanLease);
+        var files = candidate.documents().stream()
+                .map(d -> new com.securedoc.platform.application.intake.batch.CaseBatchIntake.IncomingFile(
+                        d.fileName(), d.mimeType(), d.content(), null, null))
+                .toList();
+        var result = batches.join(principal, open.get(), "WATCHED_FOLDER", files, correlationId);
+        if (result.kind() == com.securedoc.platform.application.intake.batch.CaseBatchIntake.Kind.BUSY) {
+            throw new CaseBusyException();
+        }
+        log.info("WATCHED_FOLDER_DROP_JOINED_CASE drop={} packageId={} batch={} processed={} skipped={}",
+                dropReference(candidate), result.packageId(), result.batchNumber(), result.processed(), result.skipped());
+        return Optional.of(result.packageId());
     }
 
     private PackageId resumeExisting(AuthenticatedPrincipal principal,
@@ -665,6 +735,8 @@ public final class WatchedFolderIntakeService implements ScanWatchedFolderUseCas
     private record DocumentSignature(String fileName, String mimeType, long sizeBytes, String sha256) {}
 
     private static final class DuplicateCandidateException extends RuntimeException {}
+    /** Task 0104: the contract's open case is busy with another batch; the drop waits. */
+    private static final class CaseBusyException extends RuntimeException {}
     private static final class LostScanLeaseException extends RuntimeException {}
     private static final class RecoveryConflictException extends RuntimeException {
         private RecoveryConflictException(String message) { super(message); }

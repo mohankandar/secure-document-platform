@@ -82,8 +82,35 @@ Left for the milestone: the full suite and the two-server proof. No frontend cha
 - Proof: `UploadDocumentPdfCheckTest` 10 of 10 (3 new), `IntakeStoppedByLicenceTest` 5 of 5, `UploadCaseLockPostgresTest` 7 of 7, the domain's `Document*` tests all pass.
 - **Not wired yet:** no intake calls it. The watched folder, the API and polling, and scan still make a new case for each arrival, so today's behaviour is unchanged on this branch.
 - **For the design chat:** the 50-files-per-case limit (task 0038) counts every document of the case, all batches together. A long-lived contract would reach it and its next batch would be refused, against "never refuse a business resend". Recommended: count the limit per batch. I have not changed it.
+## Watched folder joins the open case (session 2026-11-28, night)
+Merged the newest integration branch first (13 commits, among them 0118's data dictionary: migration 088 now has comments on every new table and column, change set `088-05-comments`).
+
+- **`CaseBatchIntake`** (new, application): the one join every intake calls.
+  - It finds the contract's open case (the newest case on its case-field record that is not rejected, cancelled or erased).
+  - A case that is delivered (COMPLETED) takes the arrival as its next batch: each file is an exact copy (recorded, not stored), a new document or a new version. The new ones are stored under the ids their classification gave them, their versions set, every file recorded, then the batch is submitted (`SubmitPackageCommand.nextBatch`). Only those documents are processed.
+  - A case of exact copies only gets a `NOTHING_NEW` batch: kept in the history, never processed or delivered, and never the "current batch" for export.
+  - A case still being filled, processing or in Review is BUSY: nothing changes.
+  - **Interrupted join:** the same arrival resumes the open batch (case COMPLETED with stored but unsubmitted documents), and files already recorded in it are not stored again.
+- **Watched folder:** with batches on (wired in `ApplicationServiceConfig`), a drop whose contract has an open case joins it instead of making a new case. This also applies to a resend of the same files in a new folder: accepted, recorded, nothing processed, where it used to be LV-INT-017. A busy case makes the drop **wait**: it is given back to the incoming folder untouched and unrecorded (`WatchedFolderSourcePort.release`, fenced like a disposition), and a later scan takes it once the running batch is delivered. The drop's own crash recovery (same drop, same case) is unchanged. A contract with no open case makes a new case as before.
+- **Found and fixed on the way:**
+  1. A case made after migration 088 by today's intakes had no batch rows. Its next batch would have been compared against nothing, numbered 1 and delivered with every document. `openBatch` now adopts such a case's documents as batch 1 (once, with the cycles that delivered it).
+  2. Migration 088 gave existing delivered cases no export cycle, so a next batch would have counted the case's earlier cycles against its own limit. Corrected in `088-04` (not merged anywhere yet).
+  3. **Retention during a batch:** a batch joining on day 5 of a 7-day keep period would have been purged on day 7 while in Review. `PackageLifecycle.startNextBatch` stops the delete times when a batch joins; the batch's own delivery sets them again (the owner's "retention runs from the last delivery").
+- **50-file limit (my question of 2026-11-27, not answered yet):** taken as recommended. A later batch counts only its own files (documents not yet processed). An ordinary upload counts the whole case, as before.
+
+Proof (reactor builds, `mvn -o -Pdev-build -pl securedoc-api -am test -Dtest=...`, no `mvn install`):
+
+| Run | Result |
+|---|---|
+| `CaseBatchIntakeTest` (new: the rest of a contract later; same package resent; re-signed = incremental update; e-signing re-save = PDF id; rescan with same name = possible version, not refused; busy in 6 states; interrupted join resumed) | 7 of 7 |
+| `WatchedFolderBatchTest` (new: a drop joins a delivered case and only its new file is stored; a drop for a case in Review waits, released, not refused; a resent package accepted, nothing processed) | 3 of 3 |
+| `BatchExportCycleLimitTest` (2 new: the keep period stops for a next batch and runs from the last delivery; a purged case takes no batch) | 5 of 5 |
+| `WatchedFolderAllOrNothingTest`, `WatchedFolderIntakeServiceRecoveryTest`, `WatchedFolderSchedulerFailureTest`, `CaseBatchServiceTest`, `DocumentPackageBatchTest`, `DocumentVersionRecognitionTest`, `UploadDocumentPdfCheckTest` | 7, 19, 4, 3, 4, 11, 10: all pass |
+| On a throwaway PostgreSQL (`qc-0104-pg`, port 55404): `JdbcCaseBatchStorePostgresTest` (new test: a case made without batches adopts its documents as batch 1 once, with its cycles; a batch of copies is never the current batch), every `*MigrationPostgresTest`, `LocalWatchedFolderSourceAdapterTest`, `FreshDatabaseStartPostgresTest`, `IdentityMigrationPostgresTest` | 4, 20, 14, 6, 5: all pass |
+| `DataDictionaryPostgresTest` after `scripts\Update-LexaVault-DataDictionary.ps1` (117 tables, 1,124 columns, every one commented) | 3 of 3 (a first run without `-am` read the old infrastructure jar from the shared Maven repository: re-run in the reactor) |
+
 ## Left (next session, in this order; design section 8)
-1. Wire the watched folder, then the API and polling (a reused revision or document id becomes a batch or version), then scan (operator's pick). Until an intake opens batches, every new case is a case of one batch and behaves as before.
+1. Watched folder done (above). Left: the manifest's per-file `documentId` / `replaces`; the API and polling (a reused revision or document id becomes a batch or version), then scan (operator's pick). Until an intake opens batches, every new case is a case of one batch and behaves as before.
 2. `versions.json` in the cycle folder and the version fields in the destination profile.
 3. Split destinations (`DerivedRoutingService`) still route every document of the case; limit them to the batch.
 4. "Process again" (`ReprocessPackageService`) on a case of several batches resets every document; limit it to the current batch.

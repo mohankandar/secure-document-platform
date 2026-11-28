@@ -162,6 +162,22 @@ public class LocalWatchedFolderSourceAdapter implements WatchedFolderSourcePort 
         }
     }
 
+    @Override
+    public void release(String sourceReference, WatchedFolderScanLease lease) {
+        if (!properties.isEnabled()) return;
+        Path source = resolveClaimedSource(sourceReference);
+        if (!Files.exists(source) || !source.startsWith(processingRoot())) return;
+        Optional<ClaimMarker> marker = readClaim(source);
+        // Fencing, as for a disposition: only the claim's own owner gives it back.
+        if (marker.isEmpty() || !marker.get().matches(lease)) return;
+        try {
+            Files.deleteIfExists(source.resolve(CLAIM_FILE));
+            restoreToIncoming(source, sourceReference);
+        } catch (IOException e) {
+            throw new IllegalStateException("Unable to release a watched-folder claim", e);
+        }
+    }
+
     private WatchedFolderCandidate readCandidate(Path folder) {
         String sourceReference = folder.getFileName().toString();
         Path trigger = folder.resolve(properties.getTriggerFileName());

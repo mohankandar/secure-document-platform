@@ -59,6 +59,7 @@ public class JdbcCaseBatchStore implements CaseBatchStore, com.securedoc.platfor
 
     @Override
     public Batch openBatch(TenantId tenantId, PackageId packageId, String source, Instant receivedAt) {
+        adoptFirstBatch(tenantId, packageId);
         for (int attempt = 0; ; attempt++) {
             UUID id = UUID.randomUUID();
             try {
@@ -111,7 +112,8 @@ public class JdbcCaseBatchStore implements CaseBatchStore, com.securedoc.platfor
                 select coalesce(max(b.export_cycle), 0) from case_batches b
                 where b.tenant_id = :tenant and b.package_id = :pkg
                   and b.batch_number < (select max(c.batch_number) from case_batches c
-                                        where c.tenant_id = :tenant and c.package_id = :pkg)
+                                        where c.tenant_id = :tenant and c.package_id = :pkg
+                                          and c.state <> 'NOTHING_NEW')
                 """, params(tenantId, packageId), Integer.class);
         return cycles == null ? 0 : cycles;
     }
@@ -135,11 +137,68 @@ public class JdbcCaseBatchStore implements CaseBatchStore, com.securedoc.platfor
                         .addValue("cycle", exportCycle));
     }
 
+    /**
+     * A case made without batches: its documents become batch 1 (as migration 088 did for the cases before it), with the
+     * cycles that delivered it, so the next batch is compared against them, numbered 2 and counted from there. Runs once:
+     * nothing happens when the case has a batch.
+     */
+    private void adoptFirstBatch(TenantId tenantId, PackageId packageId) {
+        MapSqlParameterSource p = params(tenantId, packageId);
+        int adopted = jdbc.update("""
+                insert into case_batches (id, tenant_id, package_id, batch_number, source, received_at, export_cycle, state)
+                select p.id, p.tenant_id, p.id, 1, 'FIRST', p.created_at, nullif(coalesce(l.successful_export_cycles, 0), 0),
+                       case when coalesce(l.successful_export_cycles, 0) > 0 then 'DELIVERED' else 'RECEIVED' end
+                from document_packages p
+                left join package_lifecycles l on l.package_id = p.id and l.tenant_id = p.tenant_id
+                where p.id = :pkg and p.tenant_id = :tenant
+                  and not exists (select 1 from case_batches b where b.package_id = :pkg)
+                  and exists (select 1 from documents d where d.package_id = :pkg and d.tenant_id = :tenant)
+                on conflict do nothing
+                """, p);
+        if (adopted == 0) return;
+        jdbc.update("""
+                update documents set batch_id = :pkg, lineage_id = coalesce(lineage_id, id)
+                where package_id = :pkg and tenant_id = :tenant and batch_id is null
+                """, p);
+        jdbc.update("""
+                insert into case_batch_files (id, tenant_id, package_id, batch_id, sha256, size_bytes, page_count, name_hash,
+                                              outcome, rule, document_id, received_at)
+                select d.id, d.tenant_id, d.package_id, :pkg, lower(d.checksum_value), coalesce(d.size_bytes, 0), d.page_count,
+                       null, 'NEW_DOCUMENT', 'NONE', d.id, d.created_at
+                from documents d
+                where d.package_id = :pkg and d.tenant_id = :tenant and d.checksum_value is not null
+                  and not exists (select 1 from case_batch_files f where f.document_id = d.id)
+                """, p);
+    }
+
+    @Override
+    public java.util.Optional<BatchState> latestBatch(TenantId tenantId, PackageId packageId) {
+        return jdbc.query("""
+                select id, batch_number, state from case_batches where tenant_id = :tenant and package_id = :pkg
+                order by batch_number desc limit 1
+                """, params(tenantId, packageId), (rs, i) -> new BatchState(rs.getObject("id", UUID.class),
+                rs.getInt("batch_number"), rs.getString("state"))).stream().findFirst();
+    }
+
+    @Override
+    public java.util.Set<String> recordedFiles(TenantId tenantId, UUID batchId) {
+        return java.util.Set.copyOf(jdbc.queryForList(
+                "select sha256 from case_batch_files where tenant_id = :tenant and batch_id = :batch",
+                new MapSqlParameterSource("tenant", tenantId.value()).addValue("batch", batchId), String.class));
+    }
+
+    @Override
+    public void markNothingNew(TenantId tenantId, UUID batchId) {
+        jdbc.update("update case_batches set state = 'NOTHING_NEW' where id = :id and tenant_id = :tenant",
+                new MapSqlParameterSource("tenant", tenantId.value()).addValue("id", batchId));
+    }
+
     private record Current(UUID id, int number) {}
 
     private List<Current> current(TenantId tenantId, PackageId packageId) {
         return jdbc.query("""
                 select id, batch_number from case_batches where tenant_id = :tenant and package_id = :pkg
+                  and state <> 'NOTHING_NEW'
                 order by batch_number desc limit 1
                 """, params(tenantId, packageId), (rs, i) -> new Current(rs.getObject("id", UUID.class), rs.getInt("batch_number")));
     }

@@ -161,6 +161,21 @@ public final class PackageLifecycle {
                 && now.isBefore(originalDeleteAt);
     }
 
+    /**
+     * Task 0104: a delivered case takes its next batch. The delete times set by the last delivery stop, so the new
+     * batch's files are not purged while it is processing or in Review; its own delivery sets them again (the keep
+     * period runs from the last delivery). A purged case takes no batch.
+     */
+    public void startNextBatch(Instant now) {
+        Objects.requireNonNull(now);
+        if (purgedAt != null || originalPurgedAt != null) {
+            throw new IllegalStateException("Original artifacts have already been purged");
+        }
+        originalDeleteAt = null;
+        redactedDeleteAt = null;
+        updatedAt = now;
+    }
+
     public boolean isRedactedPurgeDue(Instant now) {
         return purgedAt == null && redactedPurgedAt == null && redactedDeleteAt != null
                 && !now.isBefore(redactedDeleteAt);

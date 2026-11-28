@@ -154,6 +154,48 @@ class JdbcCaseBatchStorePostgresTest {
         }
     }
 
+    /** A case made by an intake without batches (after migration 088): its documents become batch 1 when batch 2 comes. */
+    @Test
+    void aCaseMadeWithoutBatchesAdoptsItsDocumentsAsBatchOneWhenTheNextBatchComes() throws Exception {
+        try (PostgresTestDatabase db = PostgresTestDatabase.migrated("cbs3")) {
+            NamedParameterJdbcTemplate jdbc = db.jdbc();
+            TenantId tenant = TenantId.generate();
+            TestRows.tenant(jdbc, tenant);
+            UUID pkgId = pkg(jdbc, tenant, UUID.randomUUID(), "COMPLETED", "2026-11-01T10:00:00Z");
+            PackageId pkg = PackageId.of(pkgId);
+            UUID delivered = document(jdbc, tenant, pkgId, UUID.randomUUID());
+            jdbc.update("UPDATE documents SET checksum_value = :sha WHERE id = :id", new MapSqlParameterSource("id", delivered)
+                    .addValue("sha", CaseBatchService.sha256("contract v1".getBytes()).toUpperCase(java.util.Locale.ROOT)));
+            jdbc.update("INSERT INTO package_lifecycles (package_id, tenant_id, successful_export_cycles, updated_at) VALUES (:p, :t, 2, now())",
+                    new MapSqlParameterSource("p", pkgId).addValue("t", tenant.value()));
+            JdbcCaseBatchStore store = new JdbcCaseBatchStore(jdbc);
+
+            CaseBatchStore.Batch next = store.openBatch(tenant, pkg, "WATCHED_FOLDER", Instant.now());
+            assertEquals(2, next.number(), "the case's first arrival is batch 1");
+            assertEquals(List.of(delivered), store.knownVersions(tenant, pkg).stream().map(Known::documentId).toList());
+            assertEquals(CaseBatchService.sha256("contract v1".getBytes()), store.knownVersions(tenant, pkg).getFirst().sha256(),
+                    "compared by its fingerprint, lower case");
+            assertEquals(2, store.cyclesBeforeCurrentBatch(tenant, pkg), "the cycles that delivered batch 1");
+            assertEquals(pkgId, jdbc.queryForObject("SELECT batch_id FROM documents WHERE id = :id",
+                    new MapSqlParameterSource("id", delivered), UUID.class));
+            store.openBatch(tenant, pkg, "API", Instant.now());
+            assertEquals(3, jdbc.queryForObject("SELECT count(*) FROM case_batches WHERE package_id = :p",
+                    new MapSqlParameterSource("p", pkgId), Integer.class), "adopted once only");
+            assertEquals(1, store.knownVersions(tenant, pkg).size());
+
+            // A batch of exact copies only: kept in the history, never the current batch to deliver.
+            CaseBatchStore.Batch copies = store.latestBatch(tenant, pkg).map(b -> new CaseBatchStore.Batch(b.id(), b.number())).orElseThrow();
+            store.recordFile(tenant, pkg, copies.id(), new CaseBatchStore.ReceivedFile(CaseBatchService.sha256("contract v1".getBytes()),
+                    11, null, null, Outcome.SKIPPED_IDENTICAL, Rule.IDENTICAL, delivered));
+            store.markNothingNew(tenant, copies.id());
+            assertEquals("NOTHING_NEW", store.latestBatch(tenant, pkg).orElseThrow().state());
+            assertEquals(java.util.Set.of(CaseBatchService.sha256("contract v1".getBytes())), store.recordedFiles(tenant, copies.id()));
+            assertEquals(java.util.Set.of(), store.currentBatchDocuments(tenant, pkg).orElseThrow(),
+                    "the current batch is batch 2 (no documents yet), not the batch of copies");
+            assertEquals(2, store.cyclesBeforeCurrentBatch(tenant, pkg));
+        }
+    }
+
     private static UUID pkg(NamedParameterJdbcTemplate jdbc, TenantId tenant, UUID record, String status, String at) {
         UUID id = UUID.randomUUID();
         jdbc.update("""

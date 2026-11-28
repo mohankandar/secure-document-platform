@@ -23,8 +23,24 @@ public interface CaseBatchStore {
      */
     java.util.Optional<PackageId> openCaseFor(TenantId tenantId, UUID businessRecordId);
 
-    /** Opens the case's next batch and gives it; the first batch of a case is number 1. */
+    /**
+     * Opens the case's next batch and gives it; the first batch of a case is number 1. A case made without batches (by an
+     * intake before task 0104, or by a first arrival) first gets its documents recorded as batch 1, so the next batch is
+     * compared against them and numbered 2.
+     */
     Batch openBatch(TenantId tenantId, PackageId packageId, String source, Instant receivedAt);
+
+    /** The case's newest batch, or empty when it has none. */
+    java.util.Optional<BatchState> latestBatch(TenantId tenantId, PackageId packageId);
+
+    /** The SHA-256 of every file already recorded in a batch (to resume a batch an interruption cut short). */
+    java.util.Set<String> recordedFiles(TenantId tenantId, UUID batchId);
+
+    /** A batch of exact copies only: recorded for the history, nothing to process or deliver. */
+    void markNothingNew(TenantId tenantId, UUID batchId);
+
+    /** State of a batch: RECEIVED, DELIVERED or NOTHING_NEW. */
+    record BatchState(UUID id, int number, String state) {}
 
     /** Records one file of a batch and what it was; {@code documentId} is null for a skipped copy. */
     void recordFile(TenantId tenantId, PackageId packageId, UUID batchId, ReceivedFile file);

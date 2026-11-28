@@ -27,4 +27,13 @@ public interface WatchedFolderSourcePort {
 
     /** Applies a terminal source disposition only when the current claim still matches the caller's fencing context. */
     void applyDisposition(String sourceReference, IntakeDisposition disposition, WatchedFolderScanLease lease);
+
+    /**
+     * Task 0104: gives a claimed drop back to the incoming folder untouched, to be taken on a later scan (its case is
+     * busy with another batch). Only while the claim still matches the caller's fencing context. An adapter that can't
+     * release a claim refuses, so a drop is never left claimed without an owner.
+     */
+    default void release(String sourceReference, WatchedFolderScanLease lease) {
+        throw new UnsupportedOperationException("This watched-folder source can't release a claim");
+    }
 }

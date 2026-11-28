@@ -6,7 +6,7 @@ Meanings ending in "(to confirm)" are drafted from the code and wait for the own
 
 The links between the main tables are drawn in [RELATIONSHIPS.md](RELATIONSHIPS.md).
 
-115 tables, 1096 columns.
+117 tables, 1124 columns.
 
 ## LexaVault tables
 
@@ -19,6 +19,8 @@ The links between the main tables are drawn in [RELATIONSHIPS.md](RELATIONSHIPS.
 | [`branding_configurations`](#branding_configurations) | Look of the user interface: names, colours and logos, one row per entity plus one installation-wide default row. |
 | [`bulk_sources`](#bulk_sources) | Intake sources an entity has marked as Bulk, with the daily window in which their cases may run (cases from them get priority BULK). |
 | [`capacity_maximums`](#capacity_maximums) | IT's own upper limit per processing stage and for AI requests at once, for the whole installation, no row means no limit set. |
+| [`case_batch_files`](#case_batch_files) | Every file of every batch and what it was (new document, new version, possible version or skipped exact copy). Kept for the life of the case, also after the original is purged, so a file arriving months later is still compared against every version ever received. Hashes only, never a file name or content. |
+| [`case_batches`](#case_batches) | One arrival of files into a case (task 0104): a case is the contract, and each later delivery of documents for it is its next batch, processed and delivered on its own. |
 | [`case_instructions`](#case_instructions) | Where each case's instructions file is stored, one row per case, the text itself is kept encrypted in the file and in no column. |
 | [`case_priorities`](#case_priorities) | A case's priority when it is not the default NORMAL, kept apart from document_packages so processing cannot undo a reviewer's change. |
 | [`dashboard_column_settings`](#dashboard_column_settings) | Per-entity setup of the case list columns: which may be shown, which show by default and in what order. |
@@ -296,6 +298,50 @@ IT's own upper limit per processing stage and for AI requests at once, for the w
 | `changed_at` | timestamp with time zone | yes |  | When the maximum was last set. |
 
 - Primary key: `name`
+
+### case_batch_files
+
+Every file of every batch and what it was (new document, new version, possible version or skipped exact copy). Kept for the life of the case, also after the original is purged, so a file arriving months later is still compared against every version ever received. Hashes only, never a file name or content.
+
+| Column | Type | Required | Default | Meaning |
+|---|---|---|---|---|
+| `id` | uuid | yes |  | Unique id of the received-file record. |
+| `tenant_id` | uuid | yes |  | The entity (tenant) the file belongs to. |
+| `package_id` | uuid | yes |  | The case the file arrived into. |
+| `batch_id` | uuid | yes |  | The batch (case_batches.id) the file arrived in. |
+| `sha256` | character varying(64) | yes |  | SHA-256 of the file's bytes (lower-case hex), its fingerprint: an exact copy has the same one and is skipped. |
+| `size_bytes` | bigint | yes |  | Size of the file in bytes. |
+| `page_count` | integer |  |  | Pages of the file, empty when it was not read (a skipped copy). Pages are billed once per version processed. |
+| `name_hash` | character varying(64) |  |  | Hash of the file's name, used only to mark a possible new version; the name itself is never kept. |
+| `outcome` | character varying(24) | yes |  | What the file was: NEW_DOCUMENT, NEW_VERSION, POSSIBLE_VERSION (same name, no other sign) or SKIPPED_IDENTICAL (not processed or counted again). |
+| `rule` | character varying(24) | yes |  | Which recognition rule decided: IDENTICAL, SOURCE_ID, REPLACES, PDF_ID, XMP_ID, INCREMENTAL_UPDATE, SAME_NAME or NONE. |
+| `document_id` | uuid |  |  | The document the file became, or for a skipped copy the identical document it was skipped for. |
+| `received_at` | timestamp with time zone | yes |  | When the file arrived. |
+
+- Primary key: `id`
+- Indexes:
+  - `idx_case_batch_files_batch`: `btree (batch_id)`
+  - `idx_case_batch_files_fingerprint`: `btree (tenant_id, package_id, sha256)`
+
+### case_batches
+
+One arrival of files into a case (task 0104): a case is the contract, and each later delivery of documents for it is its next batch, processed and delivered on its own.
+
+| Column | Type | Required | Default | Meaning |
+|---|---|---|---|---|
+| `id` | uuid | yes |  | Unique id of the batch. For a case from before batches, the case's own id. |
+| `tenant_id` | uuid | yes |  | The entity (tenant) the batch belongs to. |
+| `package_id` | uuid | yes |  | The case (document_packages.id) the batch arrived into. |
+| `batch_number` | integer | yes |  | Order of the batch within its case, from 1. |
+| `source` | character varying(24) | yes |  | How the batch arrived: WATCHED_FOLDER, API, POLLING, SCAN or UPLOAD; EXISTING for a case from before batches (migration 088); FIRST for a case's first arrival recorded when its second batch came. |
+| `received_at` | timestamp with time zone | yes |  | When the batch arrived. |
+| `export_cycle` | integer |  |  | The export cycle of the case that delivered this batch; empty until it is delivered. |
+| `state` | character varying(24) | yes |  | RECEIVED until the batch is delivered, then DELIVERED; NOTHING_NEW for a batch of exact copies only (kept for the history, nothing processed or delivered). |
+
+- Primary key: `id`
+- Indexes:
+  - `idx_case_batches_tenant_package`: `btree (tenant_id, package_id)`
+  - `uq_case_batches_number` (unique): `btree (package_id, batch_number)`
 
 ### case_instructions
 
@@ -643,6 +689,14 @@ The documents (PDF files) of each case, with their processing state.
 | `created_at` | timestamp with time zone | yes |  | When the document was taken in. |
 | `updated_at` | timestamp with time zone | yes |  | When the document row was last changed. |
 | `version` | bigint | yes | `0` | Optimistic locking counter, increased on every update. |
+| `batch_id` | uuid |  |  | The batch (case_batches.id) this document arrived in. |
+| `lineage_id` | uuid |  |  | Groups every version of one document: the id of its version 1. |
+| `version_number` | integer | yes | `1` | Version of the document within its lineage, from 1. Older versions are kept, never overwritten, and never delivered again. |
+| `replaces_document_id` | uuid |  |  | The document (earlier version) this one replaces; empty for version 1. |
+| `possible_version_of` | uuid |  |  | A document of the case this one may be a new version of (same file name, no other sign), for a person to link; empty otherwise. |
+| `pdf_id_hash` | character varying(64) |  |  | SHA-256 of the first part of the PDF's trailer /ID (kept when the file is re-saved), used to recognise a new version. |
+| `xmp_id_hash` | character varying(64) |  |  | SHA-256 of the PDF's XMP DocumentID, used to recognise a new version. |
+| `source_document_id_hash` | character varying(64) |  |  | SHA-256 of the document id the source gave (API document id, manifest documentId), used to recognise a new version. |
 | `sensitivity_level` | character varying(32) | yes | `'STANDARD'::character varying` | Level sent by the source and passed on at export, never changed by LexaVault: STANDARD, CONFIDENTIAL or HIGHLY_CONFIDENTIAL. |
 
 - Primary key: `id`
@@ -650,6 +704,7 @@ The documents (PDF files) of each case, with their processing state.
   - `package_id` → `document_packages` (id)
   - `tenant_id` → `tenants` (id)
 - Indexes:
+  - `idx_documents_lineage`: `btree (package_id, lineage_id, version_number)`
   - `idx_documents_package_id`: `btree (package_id)`
   - `idx_documents_tenant_id`: `btree (tenant_id)`
 - Referenced by: `artifacts`, `delivery_submission_documents`, `derived_deliveries`, `document_export_records`, `document_page_routes`, `external_intake_documents`, `findings`, `vault_entries`

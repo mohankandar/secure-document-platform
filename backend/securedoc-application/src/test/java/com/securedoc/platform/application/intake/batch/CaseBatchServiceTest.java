@@ -35,6 +35,9 @@ class CaseBatchServiceTest {
         @Override public Batch openBatch(TenantId t, PackageId p, String source, Instant at) { return new Batch(UUID.randomUUID(), 2); }
         @Override public void recordFile(TenantId t, PackageId p, UUID batchId, ReceivedFile file) { recorded.add(file); }
         @Override public void setVersion(TenantId t, UUID d, UUID b, Result r, String pdf, String xmp, String src) { }
+        @Override public java.util.Optional<BatchState> latestBatch(TenantId t, PackageId p) { return java.util.Optional.empty(); }
+        @Override public java.util.Set<String> recordedFiles(TenantId t, UUID batchId) { return java.util.Set.of(); }
+        @Override public void markNothingNew(TenantId t, UUID batchId) { }
     };
 
     private final CaseBatchService service = new CaseBatchService(store);

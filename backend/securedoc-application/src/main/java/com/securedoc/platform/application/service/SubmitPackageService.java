@@ -67,7 +67,9 @@ public final class SubmitPackageService implements SubmitPackageUseCase {
 
         // 4. Transition to SUBMITTED via domain lifecycle method
         //    The domain will reject if current status is not CREATED
-        documentPackage.submit();
+        // Task 0104: a delivered case's next batch goes back to SUBMITTED with only its new documents to process.
+        if (command.nextBatch()) documentPackage.submitNextBatch();
+        else documentPackage.submit();
 
         // 5. Persist
         packageRepository.save(documentPackage);

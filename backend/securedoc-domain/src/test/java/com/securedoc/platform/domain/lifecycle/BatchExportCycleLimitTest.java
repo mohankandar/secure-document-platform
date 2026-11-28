@@ -9,6 +9,8 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Task 0104, step 3: the export-cycle limit counts per batch. A new batch is never refused for the cycles of the batches
@@ -48,6 +50,32 @@ class BatchExportCycleLimitTest {
 
         // batch 3: again its own limit
         assertEquals(2 * max + 1, life.nextExportCycle(2 * max));
+    }
+
+    @Test
+    void aNextBatchStopsTheLastDeliverysKeepPeriodUntilItIsDeliveredItself() {
+        PackageLifecycle life = PackageLifecycle.create(PackageId.generate(), tenant);
+        Instant delivered = Instant.parse("2026-11-01T10:00:00Z");
+        life.recordSuccessfulExport(1, delivered, policy);
+        assertTrue(life.originalDeleteAt().isPresent());
+
+        life.startNextBatch(delivered.plusSeconds(3600));
+        Instant longAfter = delivered.plus(java.time.Duration.ofDays(400));
+        assertFalse(life.isFinalPurgeDue(longAfter), "batch 2 is never purged while it is processing or in Review");
+        assertFalse(life.isRedactedPurgeDue(longAfter));
+
+        Instant secondDelivery = delivered.plus(java.time.Duration.ofDays(45));
+        life.recordSuccessfulExport(2, secondDelivery, policy, 1);
+        assertEquals(secondDelivery.plus(java.time.Duration.ofHours(policy.originalRetentionHours())),
+                life.originalDeleteAt().orElseThrow(), "the keep period runs from the last delivery");
+    }
+
+    @Test
+    void aPurgedCaseTakesNoNextBatch() {
+        PackageLifecycle life = PackageLifecycle.create(PackageId.generate(), tenant);
+        life.recordSuccessfulExport(1, Instant.now(), policy);
+        life.markFinalPurged(Instant.now());
+        assertThrows(IllegalStateException.class, () -> life.startNextBatch(Instant.now()));
     }
 
     @Test

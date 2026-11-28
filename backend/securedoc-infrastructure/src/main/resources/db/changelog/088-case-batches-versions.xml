@@ -94,7 +94,11 @@
     <changeSet id="088-04-existing-cases-are-batch-one" author="lexavault">
         <sql>
             INSERT INTO case_batches (id, tenant_id, package_id, batch_number, source, received_at, export_cycle, state)
-            SELECT p.id, p.tenant_id, p.id, 1, 'EXISTING', p.created_at, NULL, 'RECEIVED' FROM document_packages p;
+            SELECT p.id, p.tenant_id, p.id, 1, 'EXISTING', p.created_at,
+                   NULLIF(COALESCE(l.successful_export_cycles, 0), 0),
+                   CASE WHEN COALESCE(l.successful_export_cycles, 0) > 0 THEN 'DELIVERED' ELSE 'RECEIVED' END
+            FROM document_packages p
+            LEFT JOIN package_lifecycles l ON l.package_id = p.id AND l.tenant_id = p.tenant_id;
             UPDATE documents SET batch_id = package_id, lineage_id = id, version_number = 1;
             INSERT INTO case_batch_files (id, tenant_id, package_id, batch_id, sha256, size_bytes, page_count, name_hash,
                                           outcome, rule, document_id, received_at)
@@ -105,5 +109,41 @@
         <rollback>
             <sql>DELETE FROM case_batch_files; DELETE FROM case_batches; UPDATE documents SET batch_id = NULL, lineage_id = NULL, version_number = 1;</sql>
         </rollback>
+    </changeSet>
+
+    <!-- Task 0118's rule: every new table and column has its meaning in the schema. -->
+    <changeSet id="088-05-comments" author="lexavault" runOnChange="true">
+        <setTableRemarks tableName="case_batches" remarks="One arrival of files into a case (task 0104): a case is the contract, and each later delivery of documents for it is its next batch, processed and delivered on its own."/>
+        <setColumnRemarks tableName="case_batches" columnName="id" remarks="Unique id of the batch. For a case from before batches, the case's own id."/>
+        <setColumnRemarks tableName="case_batches" columnName="tenant_id" remarks="The entity (tenant) the batch belongs to."/>
+        <setColumnRemarks tableName="case_batches" columnName="package_id" remarks="The case (document_packages.id) the batch arrived into."/>
+        <setColumnRemarks tableName="case_batches" columnName="batch_number" remarks="Order of the batch within its case, from 1."/>
+        <setColumnRemarks tableName="case_batches" columnName="source" remarks="How the batch arrived: WATCHED_FOLDER, API, POLLING, SCAN or UPLOAD; EXISTING for a case from before batches (migration 088); FIRST for a case's first arrival recorded when its second batch came."/>
+        <setColumnRemarks tableName="case_batches" columnName="received_at" remarks="When the batch arrived."/>
+        <setColumnRemarks tableName="case_batches" columnName="export_cycle" remarks="The export cycle of the case that delivered this batch; empty until it is delivered."/>
+        <setColumnRemarks tableName="case_batches" columnName="state" remarks="RECEIVED until the batch is delivered, then DELIVERED; NOTHING_NEW for a batch of exact copies only (kept for the history, nothing processed or delivered)."/>
+
+        <setTableRemarks tableName="case_batch_files" remarks="Every file of every batch and what it was (new document, new version, possible version or skipped exact copy). Kept for the life of the case, also after the original is purged, so a file arriving months later is still compared against every version ever received. Hashes only, never a file name or content."/>
+        <setColumnRemarks tableName="case_batch_files" columnName="id" remarks="Unique id of the received-file record."/>
+        <setColumnRemarks tableName="case_batch_files" columnName="tenant_id" remarks="The entity (tenant) the file belongs to."/>
+        <setColumnRemarks tableName="case_batch_files" columnName="package_id" remarks="The case the file arrived into."/>
+        <setColumnRemarks tableName="case_batch_files" columnName="batch_id" remarks="The batch (case_batches.id) the file arrived in."/>
+        <setColumnRemarks tableName="case_batch_files" columnName="sha256" remarks="SHA-256 of the file's bytes (lower-case hex), its fingerprint: an exact copy has the same one and is skipped."/>
+        <setColumnRemarks tableName="case_batch_files" columnName="size_bytes" remarks="Size of the file in bytes."/>
+        <setColumnRemarks tableName="case_batch_files" columnName="page_count" remarks="Pages of the file, empty when it was not read (a skipped copy). Pages are billed once per version processed."/>
+        <setColumnRemarks tableName="case_batch_files" columnName="name_hash" remarks="Hash of the file's name, used only to mark a possible new version; the name itself is never kept."/>
+        <setColumnRemarks tableName="case_batch_files" columnName="outcome" remarks="What the file was: NEW_DOCUMENT, NEW_VERSION, POSSIBLE_VERSION (same name, no other sign) or SKIPPED_IDENTICAL (not processed or counted again)."/>
+        <setColumnRemarks tableName="case_batch_files" columnName="rule" remarks="Which recognition rule decided: IDENTICAL, SOURCE_ID, REPLACES, PDF_ID, XMP_ID, INCREMENTAL_UPDATE, SAME_NAME or NONE."/>
+        <setColumnRemarks tableName="case_batch_files" columnName="document_id" remarks="The document the file became, or for a skipped copy the identical document it was skipped for."/>
+        <setColumnRemarks tableName="case_batch_files" columnName="received_at" remarks="When the file arrived."/>
+
+        <setColumnRemarks tableName="documents" columnName="batch_id" remarks="The batch (case_batches.id) this document arrived in."/>
+        <setColumnRemarks tableName="documents" columnName="lineage_id" remarks="Groups every version of one document: the id of its version 1."/>
+        <setColumnRemarks tableName="documents" columnName="version_number" remarks="Version of the document within its lineage, from 1. Older versions are kept, never overwritten, and never delivered again."/>
+        <setColumnRemarks tableName="documents" columnName="replaces_document_id" remarks="The document (earlier version) this one replaces; empty for version 1."/>
+        <setColumnRemarks tableName="documents" columnName="possible_version_of" remarks="A document of the case this one may be a new version of (same file name, no other sign), for a person to link; empty otherwise."/>
+        <setColumnRemarks tableName="documents" columnName="pdf_id_hash" remarks="SHA-256 of the first part of the PDF's trailer /ID (kept when the file is re-saved), used to recognise a new version."/>
+        <setColumnRemarks tableName="documents" columnName="xmp_id_hash" remarks="SHA-256 of the PDF's XMP DocumentID, used to recognise a new version."/>
+        <setColumnRemarks tableName="documents" columnName="source_document_id_hash" remarks="SHA-256 of the document id the source gave (API document id, manifest documentId), used to recognise a new version."/>
     </changeSet>
 </databaseChangeLog>

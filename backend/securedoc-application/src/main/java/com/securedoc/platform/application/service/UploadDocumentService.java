@@ -118,8 +118,13 @@ public final class UploadDocumentService implements UploadDocumentUseCase {
             throw new ValidationException(LvErrorCode.INT_006, "The file is empty");
         }
 
-        // 3a. Task 0038: a case holds up to 50 files, however it is filled.
-        if (documentPackage.documents().size() >= CaseLimits.MAX_FILES_PER_CASE) {
+        // 3a. Task 0038: a case holds up to 50 files, however it is filled. Task 0104: a later batch counts only its own
+        // files (those not yet processed), so a long-lived contract is never refused for its earlier batches.
+        long held = command.isForNextBatch()
+                ? documentPackage.documents().stream()
+                        .filter(d -> d.status() == com.securedoc.platform.domain.document.DocumentStatus.UPLOADED).count()
+                : documentPackage.documents().size();
+        if (held >= CaseLimits.MAX_FILES_PER_CASE) {
             throw new ValidationException(LvErrorCode.INT_029,
                     "The case already holds " + CaseLimits.MAX_FILES_PER_CASE + " files");
         }

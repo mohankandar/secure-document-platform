@@ -492,7 +492,8 @@ public class ApplicationServiceConfig {
             com.securedoc.platform.application.intake.watched.WatchedFolderSettingsService watchedFolderSettings,
             com.securedoc.platform.application.intake.IntakeGate intakeGate,
             PdfIntakeValidationPort pdfIntakeValidationPort,
-            PackageDashboardVisibilityPort packageDashboardVisibilityPort) {
+            PackageDashboardVisibilityPort packageDashboardVisibilityPort,
+            com.securedoc.platform.application.intake.batch.CaseBatchIntake caseBatchIntake) {
         return new WatchedFolderIntakeService(sourcePort, watchedFolderLeasePort, observationRepository, packageRepository,
                 createPackageUseCase, uploadDocumentUseCase, submitPackageUseCase,
                 packageProcessingDispatcher, auditService,
@@ -501,7 +502,23 @@ public class ApplicationServiceConfig {
                 tenant -> watchedFolderSettings.sensitivityLevel(tenant,
                         com.securedoc.platform.application.intake.watched.WatchedFolderSettingsService.INSTALLED_FOLDER)).withLicence(intakeLicence)
                 .withGate(intakeGate).withCaseFields(caseFields)
-                .withFileCheck(pdfIntakeValidationPort).withDashboardVisibility(packageDashboardVisibilityPort);
+                .withFileCheck(pdfIntakeValidationPort).withDashboardVisibility(packageDashboardVisibilityPort)
+                .withBatches(caseBatchIntake,
+                        (tenant, fields) -> caseFields.resolveOrCreate(tenant, fields).businessRecordId().value());
+    }
+
+    /** Task 0104: an arrival for a contract with an open case joins it as the next batch. */
+    @Bean
+    public com.securedoc.platform.application.intake.batch.CaseBatchIntake caseBatchIntake(
+            com.securedoc.platform.application.port.out.CaseBatchStore caseBatchStore,
+            PackageRepository packageRepository,
+            com.securedoc.platform.application.port.out.PackageLifecycleRepository packageLifecycleRepository,
+            UploadDocumentUseCase uploadDocumentUseCase,
+            SubmitPackageUseCase submitPackageUseCase,
+            com.securedoc.platform.application.port.out.PdfFileIdentityPort pdfFileIdentityPort) {
+        return new com.securedoc.platform.application.intake.batch.CaseBatchIntake(caseBatchStore, packageRepository,
+                packageLifecycleRepository, uploadDocumentUseCase, submitPackageUseCase, pdfFileIdentityPort,
+                java.time.Clock.systemUTC());
     }
 
     /** Task 0021: the watched folder's sensitivity level, set by Tenant IT. */
