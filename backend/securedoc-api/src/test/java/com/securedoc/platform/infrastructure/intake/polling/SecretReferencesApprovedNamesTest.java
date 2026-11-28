@@ -170,7 +170,7 @@ class SecretReferencesApprovedNamesTest {
                 IntegrationDirection.OUTBOUND, IntegrationProviderType.HTTP_API, IntegrationAuthenticationType.API_KEY, null,
                 "https://source.example.test", null, reference, false, 60, 2, 24, 50, 262144000L, 500,
                 IntegrationPollingScheduleType.INTERVAL, 15, null, null, 100,
-                IntegrationAcknowledgementMode.SOURCE_PICKUP_ACK, true);
+                IntegrationAcknowledgementMode.SOURCE_PICKUP_ACK, true, null, java.util.Set.of("source.example.test"));
     }
 
     static IntegrationConnection connection(String reference) {
@@ -178,6 +178,6 @@ class SecretReferencesApprovedNamesTest {
                 IntegrationDirection.OUTBOUND, IntegrationProviderType.HTTP_API, IntegrationAuthenticationType.API_KEY, null,
                 "https://source.example.test", null, reference, 30, 0, 24, 10, 10_000_000L, 100,
                 IntegrationPollingScheduleType.INTERVAL, 15, null, null, 100,
-                IntegrationAcknowledgementMode.SOURCE_PICKUP_ACK, true, Instant.now());
+                IntegrationAcknowledgementMode.SOURCE_PICKUP_ACK, true, Instant.now()).withAllowedHosts(java.util.Set.of("example.test", "destination.example", "source.example.test")); // stubbed client: these names are not resolved
     }
 }

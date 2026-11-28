@@ -6,7 +6,7 @@ Meanings ending in "(to confirm)" are drafted from the code and wait for the own
 
 The links between the main tables are drawn in [RELATIONSHIPS.md](RELATIONSHIPS.md).
 
-115 tables, 1096 columns.
+115 tables, 1097 columns.
 
 ## LexaVault tables
 
@@ -921,6 +921,7 @@ Each entity's configured connections to senders (intake sources) and destination
 | `polling_local_time` | time without time zone |  |  | For DAILY polling: local time of day of the run. |
 | `polling_time_zone` | character varying(80) |  |  | Time zone of the daily polling time. |
 | `polling_batch_limit` | integer |  |  | Most packages taken in one polling run. |
+| `allowed_hosts` | character varying(2000) |  |  | Host names the IT Administrator allows this connection to reach although internal or plain http, comma-separated, empty for none. |
 | `destination_settings` | text |  |  | JSON settings added to the destination's published profile (profile, token address, client id, field mapping), no secret. |
 
 - Primary key: `id`

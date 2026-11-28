@@ -6,7 +6,8 @@
     <!--
         Hardening (task 0110, approved by the task): outbound addresses limited. The host names the IT Administrator
         allows a connection to reach although they are internal or plain http. Empty for every existing connection.
-        Included after 088, not at the end, so the roll-back tests that count change sets from the end are unchanged.
+        Included before 044 (after the table exists), not at the end, so the roll-back tests that count change sets
+        from the end are unchanged.
     -->
     <changeSet id="089-01-connection-allowed-hosts" author="lexavault">
         <addColumn tableName="integration_connections">

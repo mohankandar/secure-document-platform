@@ -61,7 +61,7 @@ class PollingAnswerSizeLimitTest {
                 "https://source.example.test", null, null, 30, 0, 24, 10, 10_000_000L, 100,
                 com.securedoc.platform.domain.integration.IntegrationPollingScheduleType.INTERVAL, 15, null, null, 100,
                 com.securedoc.platform.domain.integration.IntegrationAcknowledgementMode.SOURCE_PICKUP_ACK, true,
-                java.time.Instant.now());
+                java.time.Instant.now()).withAllowedHosts(java.util.Set.of("example.test", "destination.example", "source.example.test")); // stubbed client: these names are not resolved
     }
 
     private static HttpPollingSourceAdapter adapter(Path staging, String body, int limit) throws Exception {
