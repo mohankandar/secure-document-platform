@@ -116,6 +116,9 @@ class LoginConnectionServiceTest {
         assertTrue(save(issuer.issuer().toString(), "lexavault-web-3").done());
         assertEquals("IDN_NOT_VALIDATED", service.activate(admin, CORRELATION, draft().configurationVersion()).code());
         assertTrue(service.testDraft(admin, CORRELATION, draft().configurationVersion(), null).done());
+        // Task 0113 (platform-core 1.2.0): a test without a token no longer lets it replace the active connection.
+        assertEquals("IDN_TEST_SIGN_IN_REQUIRED", service.activate(admin, CORRELATION, draft().configurationVersion()).code());
+        assertTrue(service.testDraft(admin, CORRELATION, draft().configurationVersion(), token).done());
         assertTrue(service.activate(admin, CORRELATION, draft().configurationVersion()).done());
         assertEquals("lexavault-web-3", service.active(admin).orElseThrow().browserClientId());
         assertTrue(service.draft(admin).isEmpty());
@@ -163,7 +166,8 @@ class LoginConnectionServiceTest {
     void goingBackToALoginSystemThisServerNoLongerUsesIsRefused() {
         assertTrue(service.startDraft(admin, CORRELATION, 1).done());
         assertTrue(save(issuer.issuer().toString(), "lexavault-web-2").done());
-        assertTrue(service.testDraft(admin, CORRELATION, draft().configurationVersion(), null).done());
+        assertTrue(service.testDraft(admin, CORRELATION, draft().configurationVersion(), 
+                issuer.token("lexavault-api", List.of("Finance Staff"), Duration.ofMinutes(5))).done()); // a token: task 0113
         assertTrue(service.activate(admin, CORRELATION, draft().configurationVersion()).done());
         security.getOidc().setAudience("lexavault-api-new");
         assertEquals("SIGN_IN_SETTINGS_DIFFER",

@@ -154,3 +154,26 @@ export function fieldRule(i: FieldRuleInput): string {
   const text = out.join(' · ');
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
+
+/**
+ * Task 0113 (U10): the allowed values as the Business Admin edits them, one per line: the code, or the code and its
+ * display name as "000 = Club". The code stays what is stored, matched and searched.
+ */
+export function valueLines(codes: string[], names?: Record<string, string> | null): string[] {
+  return codes.map((code) => (names?.[code] ? `${code} = ${names[code]}` : code));
+}
+
+/** Task 0113 (U10): the lines back to the codes, in order, and the names given (a line without "=" has none). */
+export function splitValueLines(lines: string[]): { allowedValues: string[]; allowedValueNames: Record<string, string> } {
+  const allowedValues: string[] = [];
+  const allowedValueNames: Record<string, string> = {};
+  for (const line of lines) {
+    const at = line.indexOf('=');
+    const code = (at < 0 ? line : line.slice(0, at)).trim();
+    if (!code) continue;
+    allowedValues.push(code);
+    const name = at < 0 ? '' : line.slice(at + 1).trim();
+    if (name) allowedValueNames[code] = name;
+  }
+  return { allowedValues, allowedValueNames };
+}

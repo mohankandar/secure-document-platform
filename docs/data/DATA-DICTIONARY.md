@@ -6,7 +6,7 @@ Meanings ending in "(to confirm)" are drafted from the code and wait for the own
 
 The links between the main tables are drawn in [RELATIONSHIPS.md](RELATIONSHIPS.md).
 
-115 tables, 1097 columns.
+115 tables, 1099 columns.
 
 ## LexaVault tables
 
@@ -1942,6 +1942,7 @@ Sensitivity level each watched folder gives the files it picks up, one row per e
 | `created_at` | timestamp with time zone | yes |  | When the field was created. |
 | `updated_at` | timestamp with time zone | yes |  | When the field was last changed. |
 | `updated_by` | text | yes |  | Who last changed the field. |
+| `option_names` | text[] |  |  | Display names of a dropdown field's values, in the order of options, empty for a value without one (platform-core 1.3.0); only the code is stored, matched and searched. |
 
 - Primary key: `definition_id`
 - Indexes:
@@ -2151,6 +2152,7 @@ Sensitivity level each watched folder gives the files it picks up, one row per e
 | `configuration_version` | bigint | yes |  | Version number of the connection's configuration, raised on each change and kept in the history. |
 | `created_at` | timestamp with time zone | yes | `now()` | When the connection was created. |
 | `updated_at` | timestamp with time zone | yes | `now()` | When the connection was last changed. |
+| `test_sign_in_version` | bigint |  |  | The version of this connection for which a test sign-in with a real token passed; replacing the active connection needs the draft's current version here (platform-core 1.2.0). |
 
 - Primary key: `connection_id`
 - Foreign keys:

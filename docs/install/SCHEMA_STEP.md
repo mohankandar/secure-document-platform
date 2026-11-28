@@ -9,11 +9,11 @@ dropped (`CASE_FIELDS.md`); the others follow in this order. Each keeps its own 
 | Run | What it creates | Source in the release | History table |
 |---|---|---|---|
 | App tables | LexaVault's own tables (cases, documents, audit, ...) | Liquibase changelog `db/changelog/db.changelog-master.xml` | `databasechangelog` |
-| Identity | Customer, entity slots, login connection, group grants, integration client bindings, grant history, platform-wide grants (`idn_` tables; version 5, unchanged in platform-core 1.1.0) | platform-core Flyway location `db/platform/identity` | `idn_schema_history` |
+| Identity | Customer, entity slots, login connection, group grants, integration client bindings, grant history, platform-wide grants (`idn_` tables; version 6 from platform-core 1.2.0, task 0113) | platform-core Flyway location `db/platform/identity` | `idn_schema_history` |
 | Licensing | The stored licence, usage ledger (`lic_` tables; version 2). Setup stores the licence here; the app checks it at start (`LICENSING.md`) | platform-core Flyway location `db/platform/licensing` | `lic_schema_history` |
 | Notifications | Event settings, outgoing messages, conditions and approval requests (`notif_` tables; version 1, task 0059). The app checks them at start (`NOTIFICATIONS.md`) | platform-core Flyway location `db/platform/notifications` | `notif_schema_history` |
 | Erase log | Where the database stands in the erase log (`erl_` tables; version 3, task 0060). The app checks them at start (`ERASE_LOG.md`) | platform-core Flyway location `db/platform/erase-log` | `erl_schema_history` |
-| Case fields | Field definitions and values (`fld_` tables; version 2, task 0061). Runs first. The app checks them at start (`CASE_FIELDS.md`) | platform-core Flyway location `db/platform/fields` | `fld_schema_history` |
+| Case fields | Field definitions and values (`fld_` tables; version 3 from platform-core 1.3.0, task 0113). Runs first. The app checks them at start (`CASE_FIELDS.md`) | platform-core Flyway location `db/platform/fields` | `fld_schema_history` |
 
 The platform runs start their own history at version 0 in a schema that already holds the app's tables, so their
 version 1 always runs. The identity run always goes to the latest version in the release: a database at identity
@@ -71,6 +71,12 @@ exception type, never the password.
 An upgrade is: stop every server, schema step, then start the new release. **To the release of task 0060**: migration 065 gives
 every stored file its protection record; a server of the release before must not run any more (`KEY_SERVICE.md`). Set the key
 service and the erase log location first, and run setup once so that the keys exist.
+
+**To the release of task 0113 (platform-core 1.3.0):** identity goes to version 6 and case fields to version 3. A server of
+the release before does not start on them (`IDN_VERSION_NEWER`), so stop **every** LexaVault server before the schema step,
+then start only the new release. `Update-And-Start.ps1` and `Start-LexaVault-Local.ps1` do this on one machine: they stop
+the running app first, and the schema step runs only while no backend runs. After it, a login connection replaces the active
+one only after a test sign-in with a token (paste one on the login-connection screen); drafts tested before need that once more.
 
 ## Notes
 

@@ -177,9 +177,8 @@ public final class CaseFieldService {
                     "Case field " + label + " breaks its rule (type, length, pattern or allowed values)");
         }
         if (e.code() == FieldValuesError.VALUES_CONFLICT) {
-            // The platform names the fields that differ by their keys only: [key, key].
-            List<String> labels = active.stream().filter(d -> e.getMessage().matches(
-                            "(?s).*[\\[ ,]" + java.util.regex.Pattern.quote(d.key().value()) + "[],].*"))
+            // Task 0113: the fields that differ, by their keys (platform-core 1.2.0; the message was read before).
+            List<String> labels = active.stream().filter(d -> e.conflictingKeys().contains(d.key()))
                     .map(d -> d.spec().label()).toList();
             String named = labels.isEmpty() ? "values" : String.join(", ", labels);
             return new IntakeValidationException(IntakeRejectionCode.IDENTIFIER_CONFLICT,
