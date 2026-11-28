@@ -327,3 +327,9 @@ test('task 0119: a page the final check could not read says so, not that somethi
   assert.equal(finalCheckReason(['SSN']), null);
   assert.equal(finalCheckReason(null), null);
 });
+
+test('task 0116: the Cases banner says since when processing waits for the AI server and how many cases', async () => {
+  const { processingPauseBanner } = await import('./words.ts');
+  assert.equal(processingPauseBanner('21:40', 37), 'Processing paused since 21:40: AI server unreachable · 37 cases waiting. Cases go on by themselves when it is back.');
+  assert.match(processingPauseBanner('21:40', 1), /· 1 case waiting\./);
+});

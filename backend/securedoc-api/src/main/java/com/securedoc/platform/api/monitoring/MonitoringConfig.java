@@ -41,7 +41,7 @@ public class MonitoringConfig {
         return new ModelServerCheck(servers(ai), required);
     }
 
-    static List<ModelServerCheck.Server> servers(AiRuntimeProperties ai) {
+    public static List<ModelServerCheck.Server> servers(AiRuntimeProperties ai) {
         boolean ollama = "ollama".equalsIgnoreCase(ai.getProvider().trim());
         List<ModelServerCheck.Server> out = new ArrayList<>();
         if (ollama && ai.isPoolEnabled()) {

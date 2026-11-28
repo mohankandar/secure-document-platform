@@ -623,6 +623,14 @@ public class JdbcPipelineJobRepository implements PipelineJobRepository {
     }
 
     @Override
+    public int countCasesWaiting(TenantId tenantId, String detail) {
+        Integer n = jdbc.queryForObject("SELECT count(DISTINCT package_id) FROM pipeline_jobs WHERE tenant_id = :t"
+                + " AND status IN ('READY', 'WAITING_RETRY', 'RUNNING') AND last_detail = :d",
+                new MapSqlParameterSource().addValue("t", tenantId.value()).addValue("d", detail), Integer.class);
+        return n == null ? 0 : n;
+    }
+
+    @Override
     public int countRecentlyFailingCases(TenantId tenantId, IntegrationConnectionId destinationId, Duration within) {
         var params = new MapSqlParameterSource().addValue("tenantId", tenantId.value())
                 .addValue("destinationId", destinationId.value())

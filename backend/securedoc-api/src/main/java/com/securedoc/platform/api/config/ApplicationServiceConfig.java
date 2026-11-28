@@ -1372,7 +1372,11 @@ public class ApplicationServiceConfig {
             ArtifactRepository artifactRepository,
             com.securedoc.platform.application.port.out.PdfIntakeValidationPort pdfIntakeValidationPort,
             TenantRedactionPolicyRepository tenantRedactionPolicyRepository,
-            SensitiveContentAnalysisPort sensitiveContentAnalysisPort) {
+            SensitiveContentAnalysisPort sensitiveContentAnalysisPort,
+            AiRuntimeProperties ai,
+            @org.springframework.beans.factory.annotation.Value("${securedoc.ai.vision.base-url}") String visionUrl,
+            @org.springframework.beans.factory.annotation.Value("${securedoc.ai.vision.model}") String visionModel,
+            @org.springframework.beans.factory.annotation.Value("${securedoc.ai.outage.probe-seconds:60}") long outageProbeSeconds) {
         // Task 0049: page batches. A page count that cannot be told means one job, whose step reports the problem.
         var batching = new com.securedoc.platform.application.processing.service.StagedProcessingService.PageBatching(
                 tenant -> tenantRedactionPolicyRepository.findByTenantId(tenant)
@@ -1397,7 +1401,30 @@ public class ApplicationServiceConfig {
                 processingLockPort, startPackageProcessingUseCase, startDocumentProcessingUseCase,
                 extractDocumentTextUseCase, detectSensitiveDataUseCase, redactDocumentUseCase, packageLifecycleService,
                 processingIncidentService, packageProcessingRecoveryService, auditService,
-                productTelemetryService, triggerPackageProcessingService, transactionPort, storagePort, batching);
+                productTelemetryService, triggerPackageProcessingService, transactionPort, storagePort, batching)
+                .withAiOutage(aiOutage(ai, visionUrl, visionModel, outageProbeSeconds));
+    }
+
+    /**
+     * Task 0116: an AI server outage makes the work wait. The servers are down when none of them answers the check
+     * monitoring uses (the text model's servers and the vision model's); without a model server nothing ever waits.
+     */
+    static com.securedoc.platform.application.processing.service.AiServerOutage aiOutage(AiRuntimeProperties ai,
+            String visionUrl, String visionModel, long probeSeconds) {
+        if ("heuristic".equalsIgnoreCase(ai.getProvider().trim())) {
+            return com.securedoc.platform.application.processing.service.AiServerOutage.never();
+        }
+        java.util.List<com.securedoc.platform.api.monitoring.ModelServerCheck> checks = new java.util.ArrayList<>();
+        checks.add(new com.securedoc.platform.api.monitoring.ModelServerCheck(
+                com.securedoc.platform.api.monitoring.MonitoringConfig.servers(ai), false));
+        if (visionUrl != null && !visionUrl.isBlank()) {
+            checks.add(new com.securedoc.platform.api.monitoring.ModelServerCheck(java.util.List.of(
+                    new com.securedoc.platform.api.monitoring.ModelServerCheck.Server(java.net.URI.create(
+                            visionUrl.trim().replaceAll("/+$", "") + "/api/tags"), visionModel, "")), false));
+        }
+        return new com.securedoc.platform.application.processing.service.AiServerOutage(
+                () -> checks.stream().anyMatch(check -> check.check().state() == com.documentplatform.monitoring.CheckState.DOWN),
+                java.time.Clock.systemUTC(), Duration.ofSeconds(Math.max(5, probeSeconds)));
     }
 
     /**
