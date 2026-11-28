@@ -1027,7 +1027,8 @@ public class ApplicationServiceConfig {
             @org.springframework.beans.factory.annotation.Value("${securedoc.ai.vision.model-digest}") String visionDigest,
             @org.springframework.beans.factory.annotation.Value("${securedoc.ai.vision.timeout-seconds}") int visionTimeoutSeconds,
             AiRuntimeProperties ai,
-            com.securedoc.platform.application.port.out.PageRouteRepository pageRouteRepository) {
+            com.securedoc.platform.application.port.out.PageRouteRepository pageRouteRepository,
+            com.securedoc.platform.application.port.out.AuditQueryPort auditQueryPort) {
         // Task 0083: the second check's vision prompt, for a finished file. Not a bean: Find must never get it.
         com.securedoc.platform.ai.analysis.OllamaVisionModelAdapter finishedFileVision =
                 new com.securedoc.platform.ai.analysis.OllamaVisionModelAdapter(visionUrl, visionModel,
@@ -1046,7 +1047,9 @@ public class ApplicationServiceConfig {
                         finishedFileVision))
                 // Task 0083: the same models, each with the second check's own prompt.
                 .withSecondCheck(new com.securedoc.platform.application.secondcheck.SecondCheck(textExtractionPort,
-                        semanticAnalysisPort, pageImagePort, finishedFileVision));
+                        semanticAnalysisPort, pageImagePort, finishedFileVision))
+                // Task 0119: the pages a person finished in Review are read from the audit trail.
+                .withPersonDecisions(auditQueryPort);
     }
 
     @Bean

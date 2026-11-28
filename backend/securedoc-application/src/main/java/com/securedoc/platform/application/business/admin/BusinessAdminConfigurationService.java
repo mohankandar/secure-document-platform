@@ -199,7 +199,7 @@ public final class BusinessAdminConfigurationService {
                 keepLastFour, visionEnabled, visionOcrThreshold, secondCheckEnabled, null);
     }
 
-    /** Task 0065: as above, with the document context; null keeps the stored value (off). No pack turns it on. */
+    /** Task 0065: as below, with the final check's re-read kept as stored. */
     public TenantRedactionPolicy updateSensitiveDataPolicy(TenantId tenantId, ActorId actorId,
                                                             CorrelationId correlationId,
                                                             Set<EntityType> enabledTypes,
@@ -215,6 +215,31 @@ public final class BusinessAdminConfigurationService {
                                                             Double visionOcrThreshold,
                                                             Boolean secondCheckEnabled,
                                                             Boolean documentContextEnabled) {
+        return updateSensitiveDataPolicy(tenantId, actorId, correlationId, enabledTypes, autoRedactThreshold,
+                reviewMode, maskSsnLastFour, searchableRedactedPages, pageBatchSize, pageBatchOverlap, packs,
+                keepLastFour, visionEnabled, visionOcrThreshold, secondCheckEnabled, documentContextEnabled, null);
+    }
+
+    /**
+     * Task 0065: with the document context; null keeps the stored value (off). No pack turns it on. Task 0119: and the
+     * final check's re-read of picture pages; null keeps the stored value (on).
+     */
+    public TenantRedactionPolicy updateSensitiveDataPolicy(TenantId tenantId, ActorId actorId,
+                                                            CorrelationId correlationId,
+                                                            Set<EntityType> enabledTypes,
+                                                            double autoRedactThreshold,
+                                                            ReviewMode reviewMode,
+                                                            boolean maskSsnLastFour,
+                                                            boolean searchableRedactedPages,
+                                                            Integer pageBatchSize,
+                                                            Integer pageBatchOverlap,
+                                                            Set<RegulationPack> packs,
+                                                            Set<EntityType> keepLastFour,
+                                                            Boolean visionEnabled,
+                                                            Double visionOcrThreshold,
+                                                            Boolean secondCheckEnabled,
+                                                            Boolean documentContextEnabled,
+                                                            Boolean finalCheckRereadEnabled) {
         if (enabledTypes == null || enabledTypes.isEmpty()) {
             throw new ValidationException(LvErrorCode.CFG_001, "At least one sensitive-data category must be enabled");
         }
@@ -259,9 +284,12 @@ public final class BusinessAdminConfigurationService {
                 || newPacks.stream().anyMatch(pack -> pack.secondCheck() && !storedPacks.contains(pack));
         boolean storedContext = previous.map(TenantRedactionPolicy::documentContext).orElse(false);
         boolean documentContext = documentContextEnabled != null ? documentContextEnabled : storedContext;
+        boolean storedReread = previous.map(TenantRedactionPolicy::finalCheckReread).orElse(true);
+        boolean finalCheckReread = finalCheckRereadEnabled != null ? finalCheckRereadEnabled : storedReread;
         TenantRedactionPolicy policy = new TenantRedactionPolicy(
                 tenantId, enabledTypes, autoRedactThreshold, reviewMode, maskSsnLastFour, Instant.now(),
-                searchableRedactedPages, batches, newPacks, lastFour, true, vision, secondCheck, documentContext);
+                searchableRedactedPages, batches, newPacks, lastFour, true, vision, secondCheck, documentContext,
+                finalCheckReread);
         if (previous.isPresent() && sameSensitiveDataPolicy(previous.get(), policy.enabledEntityTypes(),
                 autoRedactThreshold, reviewMode, maskSsnLastFour)
                 && previous.get().searchableRedactedPages() == searchableRedactedPages
@@ -269,6 +297,7 @@ public final class BusinessAdminConfigurationService {
                 && storedVision.equals(vision)
                 && storedCheck == secondCheck
                 && storedContext == documentContext
+                && storedReread == finalCheckReread
                 && previous.get().packs().equals(policy.packs())
                 && previous.get().keepLastFour().equals(policy.keepLastFour())
                 && previous.get().lockedItemsOn()) {
@@ -316,6 +345,8 @@ public final class BusinessAdminConfigurationService {
                 + (policy.secondCheck() ? ", secondCheck=true" : "")
                 // Task 0065: written only when on.
                 + (policy.documentContext() ? ", documentContext=true" : "")
+                // Task 0119: written only when off.
+                + (policy.finalCheckReread() ? "" : ", finalCheckReread=false")
                 // Task 0062: packs and styles, written only when there are any (no key = none).
                 + (policy.packs().isEmpty() ? "" : ", packs=" + sortedNames(policy.packs()))
                 + (policy.keepLastFour().isEmpty() ? "" : ", keepLastFour=" + sortedNames(policy.keepLastFour()));

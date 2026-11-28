@@ -8,9 +8,9 @@
         the entity's Cases-page settings, set by the Business Admin. Waiting time on a Needs-you row turns amber after
         wait_amber_minutes and red after wait_red_minutes (defaults 4 h and 8 h); a case still without documents is closed
         as expired after empty_case_expiry_days (default: securedoc.cases.empty-case-expiry-days, 7). No row: the defaults.
-        090 is task 0118's comments changelog. Included after 089, not at the end (roll-back tests count from the end).
+        090 is task 0118's comments changelog, 091 is task 0119's. Included after 089, not at the end (roll-back tests count from the end).
     -->
-    <changeSet id="091-01-case-page-settings" author="lexavault">
+    <changeSet id="092-01-case-page-settings" author="lexavault">
         <createTable tableName="case_page_settings"
                      remarks="The entity's Cases-page settings chosen by the Business Admin: when waiting time turns amber and red, and after how many days a case without documents expires. No row: the defaults.">
             <column name="tenant_id" type="UUID" remarks="The entity (tenant) these settings belong to.">

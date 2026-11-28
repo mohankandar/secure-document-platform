@@ -22,5 +22,7 @@ public record UpdateSensitiveDataPolicyRequest(
         /* Task 0083: null keeps the stored value (a pack newly turned on can turn it on). */
         Boolean secondCheckEnabled,
         /* Task 0065: null keeps the stored value. */
-        Boolean documentContextEnabled
+        Boolean documentContextEnabled,
+        /* Task 0119: the final check reads picture pages again (on by default); null keeps the stored value. */
+        Boolean finalCheckRereadEnabled
 ) {}

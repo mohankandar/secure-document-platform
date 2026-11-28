@@ -1005,6 +1005,9 @@
 }
 .cf-view-note { margin: 6px 0 0; font-size: 12px; color: var(--cf-muted); }
 /* Task 0108, iPad portrait: with Source and Docs hidden, the row's grid has only the columns it shows. */
-@media (min-width: 769px) and (max-width: 900px) {
+@media (max-width: 900px) {
   .cf-desk .cf-case { grid-template-columns: 180px minmax(0, 1fr) var(--cf-stage-col) 76px; }
+}
+@media (max-width: 768px) {
+  .cf-desk .cf-case { grid-template-columns: minmax(0, 1fr) auto; }
 }

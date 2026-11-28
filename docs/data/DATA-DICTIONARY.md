@@ -6,7 +6,7 @@ Meanings ending in "(to confirm)" are drafted from the code and wait for the own
 
 The links between the main tables are drawn in [RELATIONSHIPS.md](RELATIONSHIPS.md).
 
-117 tables, 1109 columns.
+117 tables, 1110 columns.
 
 ## LexaVault tables
 
@@ -1789,6 +1789,7 @@ An entity's sensitive-data policy: review rules, thresholds and processing switc
 | `vision_ocr_threshold` | double precision | yes | `0.85` | Text-reading confidence below which a page is routed to the vision model, 0.50 to 0.99, default 0.85. |
 | `second_check_enabled` | boolean | yes | `false` | Whether a second AI reads the finished file before it is kept, off by default. |
 | `document_context_enabled` | boolean | yes | `false` | Whether the names search gets a short summary of the document and the case instructions, off by default. |
+| `final_check_reread_enabled` | boolean | yes | `true` | Whether the final check reads again, with OCR and the vision model, the picture pages no person looked at in the case, on by default. |
 
 - Primary key: `tenant_id`
 - Foreign keys:

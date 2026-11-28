@@ -2,7 +2,7 @@ package com.securedoc.platform.application.casepage;
 
 /**
  * Task 0108 (addendum 2) and 0111 question 1: the entity's Cases-page settings, set by the Business Admin (table
- * case_page_settings, migration 091). Waiting time on a Needs-you row turns amber after {@code waitAmberMinutes} and red
+ * case_page_settings, migration 092). Waiting time on a Needs-you row turns amber after {@code waitAmberMinutes} and red
  * after {@code waitRedMinutes}; a case a person or a folder opened that still has no documents after
  * {@code emptyCaseExpiryDays} is closed as expired.
  */

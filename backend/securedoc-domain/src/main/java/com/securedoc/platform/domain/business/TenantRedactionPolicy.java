@@ -27,6 +27,9 @@ import java.util.Set;
  * its document and the case's instructions.
  *
  * <p>Task 0064: {@code vision} says whether routed pages are read by the vision model, and the routing threshold.
+ *
+ * <p>Task 0119: {@code finalCheckReread} (on by default) has the final check read again, with OCR and the vision model,
+ * the picture pages no person looked at in the case. The final check's text search of every page is not switchable.
  */
 public record TenantRedactionPolicy(
         TenantId tenantId,
@@ -42,8 +45,20 @@ public record TenantRedactionPolicy(
         boolean lockedItemsOn,
         VisionSettings vision,
         boolean secondCheck,
-        boolean documentContext
+        boolean documentContext,
+        boolean finalCheckReread
 ) {
+    /** The policy as it was before task 0119: the final check reads picture pages again (on). */
+    public TenantRedactionPolicy(TenantId tenantId, Set<EntityType> enabledEntityTypes, double autoRedactThreshold,
+                                 ReviewMode reviewMode, boolean maskSsnLastFour, Instant updatedAt,
+                                 boolean searchableRedactedPages, PageBatchSettings pageBatches,
+                                 Set<RegulationPack> packs, Set<EntityType> keepLastFour, boolean lockedItemsOn,
+                                 VisionSettings vision, boolean secondCheck, boolean documentContext) {
+        this(tenantId, enabledEntityTypes, autoRedactThreshold, reviewMode, maskSsnLastFour, updatedAt,
+                searchableRedactedPages, pageBatches, packs, keepLastFour, lockedItemsOn, vision, secondCheck,
+                documentContext, true);
+    }
+
     /** The policy as it was before task 0065: no document context. */
     public TenantRedactionPolicy(TenantId tenantId, Set<EntityType> enabledEntityTypes, double autoRedactThreshold,
                                  ReviewMode reviewMode, boolean maskSsnLastFour, Instant updatedAt,

@@ -15,13 +15,13 @@ import java.util.OptionalInt;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-/** Task 0108: migration 091, one Cases-page settings row per entity, saved again in place; the table refuses bad ranges. */
+/** Task 0108: migration 092, one Cases-page settings row per entity, saved again in place; the table refuses bad ranges. */
 @EnabledIfEnvironmentVariable(named = "LEXAVAULT_TEST_PG_URL", matches = "jdbc:postgresql:.*")
 class CasePageSettingsStorePostgresTest {
 
     @Test
     void savesReadsAndReplacesPerEntity() throws Exception {
-        try (PostgresTestDatabase db = PostgresTestDatabase.migrated("m091")) {
+        try (PostgresTestDatabase db = PostgresTestDatabase.migrated("m092")) {
             TenantId tenant = TenantId.generate();
             TenantId other = TenantId.generate();
             TestRows.tenant(db.jdbc(), tenant);

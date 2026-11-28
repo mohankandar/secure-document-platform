@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.OptionalInt;
 
-/** Table case_page_settings (migration 091, task 0108). */
+/** Table case_page_settings (migration 092, task 0108). */
 @Repository
 public class JdbcCasePageSettingsStore implements CasePageSettingsStore {
     private final NamedParameterJdbcTemplate jdbc;

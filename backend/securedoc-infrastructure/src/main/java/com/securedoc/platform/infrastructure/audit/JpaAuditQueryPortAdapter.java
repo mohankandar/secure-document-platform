@@ -41,6 +41,25 @@ public class JpaAuditQueryPortAdapter implements AuditQueryPort {
                 .toList();
     }
 
+    /** Task 0119: never the system actor (automatic decisions). */
+    private static final java.util.UUID SYSTEM_ACTOR = new java.util.UUID(0L, 0L);
+    private static final int MOST_DECISIONS = 20_000;
+
+    @Override
+    public java.util.Set<String> findingsDecidedByAPerson(com.securedoc.platform.domain.identity.TenantId tenantId,
+                                                         String caseId) {
+        if (caseId == null || caseId.isBlank()) return java.util.Set.of();
+        Specification<AuditRecordEntity> spec = (root, query, cb) -> cb.and(
+                cb.equal(root.get("tenantId"), tenantId.value()),
+                cb.equal(root.get("caseId"), caseId),
+                cb.equal(root.get("resourceType"), "Finding"),
+                root.get("action").in(PERSON_DECISIONS),
+                cb.notEqual(root.get("actorId"), SYSTEM_ACTOR));
+        java.util.Set<String> ids = new java.util.HashSet<>();
+        auditRepo.findAll(spec, PageRequest.of(0, MOST_DECISIONS)).forEach(r -> ids.add(r.getResourceId()));
+        return ids;
+    }
+
     private Specification<AuditRecordEntity> buildSpecification(AuditRecordFilter filter) {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();

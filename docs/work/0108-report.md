@@ -5,7 +5,7 @@ Status 2026-11-28: **all 7 parts built** on `feature/0108-cases-at-volume` (part
 ## What changed
 
 **Backend**
-- Migration **091** `case_page_settings` (one row per entity; 090 is 0118's): amber and red waiting times (defaults 4 h and 8 h) and the days before a case without documents expires (0111 question 1, "yes" 2026-11-27 18:22). No row: the defaults; the installation's `securedoc.cases.empty-case-expiry-days` stays the default days. The table refuses red before amber and out-of-range values itself.
+- Migration **092** `case_page_settings` (one row per entity; 090 is 0118's, 091 is 0119's): amber and red waiting times (defaults 4 h and 8 h) and the days before a case without documents expires (0111 question 1, "yes" 2026-11-27 18:22). No row: the defaults; the installation's `securedoc.cases.empty-case-expiry-days` stays the default days. The table refuses red before amber and out-of-range values itself.
 - `GET/PUT /api/v1/business-admin/case-page-settings` (`TENANT_POLICY_MANAGE`, the signed-in person's entity only, `no-store`). A save out of range is refused whole (LV-CFG-001); a real change writes one audit record (`DASHBOARD_CONFIGURATION_CHANGED`, the old and new numbers); the same values again write nothing.
 - The empty-case expiry now uses each entity's days (an entity whose days can't be read is left alone).
 - `GET /me/case-view` also answers the entity's amber/red times.
@@ -56,3 +56,12 @@ Kept exactly (addendum list): stage box filter and clear; approval tick boxes an
 
 ## Product names
 No other product's name or behaviour in code.
+
+## After merging the integration branch (0119, `b531508`)
+- Migration renumbered **091 → 092** (0119 took 091). Data dictionary regenerated (117 tables, 1,110 columns).
+- The iPad-portrait row grid uses only the documented breakpoints (UI-framework contract).
+- Backend `verify` on the merged code: domain 91, application 420, infrastructure 218 (2 skipped), API 1,004 (5 skipped), **1 failure**: `BulkNightPostgresTest.aMigrationNight` ("Bulk stopped at 6 AM", 31 against 30), a timing test this change does not touch. Run alone 3 times: 3 passes (flaky under the full run's load; not changed here).
+- Frontend after the merge: type check, vocabulary 252, ui-framework 19, tablet Cases 15/15, a11y `cases0108b` + `reflow` 15/15 (light).
+
+## TO-TEST entry (to add when merged)
+0108 Cases at volume: open Cases with many cases. Six stage boxes; Needs you open (25, then Show 25 more); In progress and Exported today one line each with the true count. Stopped cases are not listed (IT: the Stopped box opens Support; Find still opens one and its card says "With IT"); rejected and cancelled cases are not listed (Reports). View menu: sort, order, columns, density, saved with your sign-in. Urgent and Send failed tags; on Needs you the waiting time turns amber after 4 h and red after 8 h (Admin > Redaction & retention > Cases page sets both and the days before an empty case expires). Drop a new case while the page is open: "1 new case · Show" appears instead of the row jumping in. Click a row: the card slides over the list; Esc, ✕ or a click on empty space closes it. Filter box: one focus ring. Try both iPad sizes.

@@ -23,7 +23,7 @@
     <include file="db/changelog/086-refused-drop-cases.xml"/>
     <include file="db/changelog/087-finding-placement.xml"/>
     <include file="db/changelog/089-user-case-view.xml"/>
-    <include file="db/changelog/091-case-page-settings.xml"/>
+    <include file="db/changelog/092-case-page-settings.xml"/>
     <include file="db/changelog/014-integration-connection-foundation.xml"/>
     <include file="db/changelog/015-external-machine-intake.xml"/>
     <include file="db/changelog/016-polling-ingestion.xml"/>
@@ -76,6 +76,7 @@
     <include file="db/changelog/072-intake-refusals.xml"/>
     <include file="db/changelog/085-document-context.xml"/>
     <include file="db/changelog/067-destination-profiles.xml"/>
+    <include file="db/changelog/091-final-check-reread.xml"/>
     <!-- Task 0118: last, after every table and column exists. -->
     <include file="db/changelog/090-schema-comments.xml"/>
 </databaseChangeLog>
