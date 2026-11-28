@@ -418,6 +418,9 @@ let first;
 let field;
 try {
   startKeycloak(); // it takes a while to start; step 1 runs meanwhile
+  // The AI server is up before anything starts LexaVault (the first-entity command starts it too, and its start checks the
+  // AI server's models).
+  await new Promise((r) => ai.listen(aiPort, '127.0.0.1', r));
   await step('1. No secret in the package', scanForSecrets);
 
   await step('A throwaway login system (Keycloak, its own zip)', async () => {
@@ -432,7 +435,6 @@ try {
 
   await step('3. Setup, the first entity, and LexaVault starts (everyday account)', async () => {
     setupAndFirstEntity(fresh);
-    await new Promise((r) => ai.listen(aiPort, '127.0.0.1', r));
     await startApp(fresh, 'first');
     return `${SLOT} active as "${ENTITY_NAME}"; health UP`;
   });
