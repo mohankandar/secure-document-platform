@@ -134,7 +134,7 @@ jobs:
         shell: pwsh
         run: |
           choco install tesseract -y --no-progress
-          "C:Program FilesTesseract-OCR" | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
+          "C:\Program Files\Tesseract-OCR" | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
       # The runner images carry PostgreSQL as the operating system's own package or installer.
       - name: PostgreSQL (Linux)
         if: runner.os == 'Linux'
