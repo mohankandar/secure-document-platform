@@ -11,6 +11,12 @@ on:
   schedule:
     - cron: '23 5 4 * *'
   workflow_dispatch:
+    inputs:
+      build:
+        description: development (demo licence) until the production licence keys exist, then production
+        type: choice
+        options: [development, production]
+        default: development
   pull_request:
     paths:
       - '.github/workflows/install-proof.yml'
@@ -64,11 +70,14 @@ jobs:
             </servers>
           </settings>
           EOF
-      - name: Build (development build; tests run in the ci workflow)
+      - name: Build (tests run in the ci workflow)
         working-directory: backend
         env:
           PLATFORM_CORE_READ_TOKEN: ${{ secrets.PLATFORM_CORE_READ_TOKEN }}
-        run: mvn -B -Pdev-build install -DskipTests
+          BUILD_KIND: ${{ inputs.build || 'development' }}
+        run: |
+          # 0114 Q1 (a): a development build with the demo licence until 0088 ships the production keys.
+          if [ "$BUILD_KIND" = production ]; then mvn -B install -DskipTests; else mvn -B -Pdev-build install -DskipTests; fi
       - name: Build the screens
         working-directory: frontend/securedoc-ui
         run: npm ci && npm run build

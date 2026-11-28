@@ -190,17 +190,20 @@ async function startApp(label) {
     '--spring.main.banner-mode=off'], { cwd: join(run, 'work'), env: { ...process.env, ...appEnv() } });
   app.stdout.on('data', (d) => appendFileSync(log, d));
   app.stderr.on('data', (d) => appendFileSync(log, d));
+  let last = 'no answer';
   for (const end = Date.now() + 180_000; Date.now() < end; await sleep(1000)) {
     if (app.exitCode !== null) throw new Error(`the app stopped at start (exit ${app.exitCode}); log: ${tail(log)}`);
     try {
       // Live and answering. Not readiness: with the demo sign-in file its login-system check is down (a placeholder
       // login system); the sign-in with a throwaway login system is the proof's open part (0114 report).
-      if ((await fetch(`${base}/actuator/health/liveness`)).status === 200
-          && (await fetch(`${base}/api/v1/packages`, { headers: { 'X-Tenant-Id': ENTITY, 'X-Actor-Id': ACTOR,
-            'X-Actor-Roles': 'DOCUMENT_PROCESSOR' } })).status === 200) return;
+      const live = (await fetch(`${base}/actuator/health/liveness`)).status;
+      const api = await fetch(`${base}/api/v1/packages`, { headers: { 'X-Tenant-Id': ENTITY, 'X-Actor-Id': ACTOR,
+        'X-Actor-Roles': 'DOCUMENT_PROCESSOR' } });
+      last = `liveness ${live}, cases ${api.status} ${(await api.text()).slice(0, 160)}`;
+      if (live === 200 && api.status === 200) return;
     } catch { /* not up yet */ }
   }
-  throw new Error(`the app was not ready within 180 s; log: ${tail(log)}`);
+  throw new Error(`the app was not ready within 180 s (${last}); log: ${tail(log)}`);
 }
 const tail = (file) => readFileSync(file, 'utf8').split(/\r?\n/).filter((l) => /ERROR|LV_STARTUP|Exception|refused/i.test(l))
   .slice(-5).map((l) => l.slice(0, 300)).join(' / ');
