@@ -53,12 +53,36 @@ Reactor builds only, no `mvn install` (rule 11).
 - the export-cycle limit would no longer apply to batches.
 The task asks for exactly this (rules 1, 5 and 7), so I read it as approval. I have **not** changed the pipeline until that is confirmed. Recommended: confirm. Nothing already processed is reprocessed, and the final check (0099) still runs on every new document and version in full.
 
+**Answer (design chat, 2026-11-27 19:00): confirmed as recommended.** The 3-run limit does not apply to batches; it still applies to "Process again" on the same documents.
+
+## Step 3, session 2026-11-27 evening (built)
+- **Processing:** no change needed. The staged pipeline, the inline path and `PackageProcessingService` already process only UPLOADED documents. A batch's new documents arrive UPLOADED; the documents of earlier batches stay PROCESSED and are not read, found, redacted or checked again.
+- **Export of the batch only:** `PackageDocumentExportService` (direct export, staged export job and the rebuild of a submission) delivers only the current batch's documents when the case has more than one batch. A case of one batch, or one from before batches, delivers every document, as before.
+- **Export-cycle limit per batch:** `PackageLifecycle.nextExportCycle(cyclesBeforeBatch)` and `recordSuccessfulExport(..., cyclesBeforeBatch)`. Only the current batch's cycles count against the limit of 3, so a new batch is never refused for the cycles of the batches before it. Re-exports of one batch stay limited. The old methods stay and mean "one batch".
+- **Port `CaseBatchScope`** (implemented by `JdbcCaseBatchStore`; `singleBatch()` keeps the old rules): the cycles before the current batch, the current batch's documents, and "current batch delivered" (sets `case_batches.export_cycle` and `state = DELIVERED`). `PackageLifecycleService` takes it (new constructor; the older constructors use `singleBatch()`), wired in `ApplicationServiceConfig`.
+- No schema change: the existing columns of migration 088 are used.
+
+**Proof (reactor builds, `mvn -o -pl securedoc-api -am test -Dtest=...`, no `mvn install`; throwaway PostgreSQL `qc-0104-pg` on port 55404, removed afterwards):**
+
+| Run | Result |
+|---|---|
+| `BatchExportCycleLimitTest` (new: one batch as before; batch 2 after the limit; its own re-exports limited; bad input refused) | 3 of 3 |
+| `PackageDocumentExportServiceTest` (new test: a later batch delivers only its own documents) | 3 of 3 |
+| `PackageDocumentExportSensitivityTest`, `ExportAuditNoFileNameTest`, `RetentionTimersTest` | 2, 2, 1, all pass |
+| `JdbcCaseBatchStorePostgresTest` (new test: the batch scope: no batches, batch 1, batch 2, cycles before, delivered) | 3 of 3 |
+| `FreshDatabaseStartPostgresTest` (the Spring context with the new bean, fresh install) | 6 of 6 |
+| `ExportJobServiceTest`, `ExportJobSettingsTest`, `PackageLifecycleDashboardRetentionTest`, `ReprocessPackageServiceTest`, `DocumentLifecycleRoleBoundaryContractTest` | all pass (47 tests in that run, 0 failures) |
+| `ExportRetentionTest`, `StagedPipelinePostgresTest`, `TriggerProcessingExportModeTest`, `RejectCaseServiceTest`, `CaseBatchServiceTest`, `DocumentPackageBatchTest`, `DocumentVersionRecognitionTest` | 8, 21, 5, 6, 3, 4, 11, all pass |
+
+Left for the milestone: the full suite and the two-server proof. No frontend change.
+
 ## Left (next session, in this order; design section 8)
-1. Find the open case for a case-field record. Let a case take a new batch after delivery, and queue a batch that arrives while a batch is processing or in Review.
-2. Wire the watched folder, then the API and polling (a reused revision or document id becomes a batch or version), then scan (operator's pick).
-3. Process and deliver only the batch: `versions.json`, no cycle limit for batches.
-4. Case history, "New version" badge, Reports, user guide, the intake-paths test, the no-redacted-value check, and the owner's four examples as tests.
-5. Page-decision reuse.
+1. Wire the watched folder, then the API and polling (a reused revision or document id becomes a batch or version), then scan (operator's pick). Until an intake opens batches, every new case is a case of one batch and behaves as before.
+2. `versions.json` in the cycle folder and the version fields in the destination profile.
+3. Split destinations (`DerivedRoutingService`) still route every document of the case; limit them to the batch.
+4. "Process again" (`ReprocessPackageService`) on a case of several batches resets every document; limit it to the current batch.
+5. Case history, "New version" badge, Reports, user guide, the intake-paths test, the no-redacted-value check, and the owner's four examples as tests.
+6. Page-decision reuse.
 
 ## Decisions taken (design section 9, as recommended)
 1. Mixed key fields go to a person. Until that screen exists they stay refused (LV-INT-016).

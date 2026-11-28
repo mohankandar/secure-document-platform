@@ -20,7 +20,7 @@ import java.util.UUID;
  * gone, the fingerprint is not.
  */
 @Repository
-public class JdbcCaseBatchStore implements CaseBatchStore {
+public class JdbcCaseBatchStore implements CaseBatchStore, com.securedoc.platform.application.port.out.CaseBatchScope {
 
     private final NamedParameterJdbcTemplate jdbc;
 
@@ -103,6 +103,45 @@ public class JdbcCaseBatchStore implements CaseBatchStore {
                 .addValue("possible", result.possibleVersionOf()).addValue("pdf", pdfIdHash).addValue("xmp", xmpIdHash)
                 .addValue("src", sourceDocumentIdHash));
         if (updated != 1) throw new IllegalStateException("No such document of this entity");
+    }
+
+    @Override
+    public int cyclesBeforeCurrentBatch(TenantId tenantId, PackageId packageId) {
+        Integer cycles = jdbc.queryForObject("""
+                select coalesce(max(b.export_cycle), 0) from case_batches b
+                where b.tenant_id = :tenant and b.package_id = :pkg
+                  and b.batch_number < (select max(c.batch_number) from case_batches c
+                                        where c.tenant_id = :tenant and c.package_id = :pkg)
+                """, params(tenantId, packageId), Integer.class);
+        return cycles == null ? 0 : cycles;
+    }
+
+    @Override
+    public java.util.Optional<java.util.Set<UUID>> currentBatchDocuments(TenantId tenantId, PackageId packageId) {
+        List<Current> current = current(tenantId, packageId);
+        if (current.isEmpty() || current.getFirst().number() <= 1) return java.util.Optional.empty();
+        return java.util.Optional.of(java.util.Set.copyOf(jdbc.queryForList("""
+                select d.id from documents d
+                where d.tenant_id = :tenant and d.package_id = :pkg and d.batch_id = :batch
+                """, params(tenantId, packageId).addValue("batch", current.getFirst().id()), UUID.class)));
+    }
+
+    @Override
+    public void currentBatchDelivered(TenantId tenantId, PackageId packageId, int exportCycle) {
+        List<Current> current = current(tenantId, packageId);
+        if (current.isEmpty()) return; // a case from before batches, or from an intake not yet joined to batches
+        jdbc.update("update case_batches set export_cycle = :cycle, state = 'DELIVERED' where id = :id and tenant_id = :tenant",
+                new MapSqlParameterSource("tenant", tenantId.value()).addValue("id", current.getFirst().id())
+                        .addValue("cycle", exportCycle));
+    }
+
+    private record Current(UUID id, int number) {}
+
+    private List<Current> current(TenantId tenantId, PackageId packageId) {
+        return jdbc.query("""
+                select id, batch_number from case_batches where tenant_id = :tenant and package_id = :pkg
+                order by batch_number desc limit 1
+                """, params(tenantId, packageId), (rs, i) -> new Current(rs.getObject("id", UUID.class), rs.getInt("batch_number")));
     }
 
     private static MapSqlParameterSource params(TenantId tenantId, PackageId packageId) {

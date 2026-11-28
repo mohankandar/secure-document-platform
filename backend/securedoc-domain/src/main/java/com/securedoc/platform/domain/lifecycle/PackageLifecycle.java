@@ -53,22 +53,37 @@ public final class PackageLifecycle {
     }
 
     public int nextExportCycle() {
+        return nextExportCycle(0);
+    }
+
+    /**
+     * Task 0104: the limit of successful export cycles counts per batch. {@code cyclesBeforeBatch} is the number of
+     * cycles that delivered the case's earlier batches (0 for a case of one batch). Only the current batch's cycles count
+     * against the limit, so a new batch is never refused, while re-exports of one batch stay limited.
+     */
+    public int nextExportCycle(int cyclesBeforeBatch) {
         if (purgedAt != null || originalPurgedAt != null) {
             throw new IllegalStateException("Original artifacts have already been purged");
         }
-        if (successfulExportCycles >= TenantLifecyclePolicy.MAX_SUCCESSFUL_EXPORT_CYCLES) {
+        if (cyclesOfBatch(cyclesBeforeBatch) >= TenantLifecyclePolicy.MAX_SUCCESSFUL_EXPORT_CYCLES) {
             throw new IllegalStateException("Maximum successful export cycles reached");
         }
         return successfulExportCycles + 1;
     }
 
     public void recordSuccessfulExport(int cycleNumber, Instant exportedAt, TenantLifecyclePolicy policy) {
+        recordSuccessfulExport(cycleNumber, exportedAt, policy, 0);
+    }
+
+    /** Task 0104: as {@link #recordSuccessfulExport(int, Instant, TenantLifecyclePolicy)}, the limit counted per batch. */
+    public void recordSuccessfulExport(int cycleNumber, Instant exportedAt, TenantLifecyclePolicy policy,
+                                       int cyclesBeforeBatch) {
         Objects.requireNonNull(exportedAt);
         Objects.requireNonNull(policy);
         if (cycleNumber != successfulExportCycles + 1) {
             throw new IllegalStateException("Export cycle is not the next successful cycle");
         }
-        if (cycleNumber > TenantLifecyclePolicy.MAX_SUCCESSFUL_EXPORT_CYCLES) {
+        if (cyclesOfBatch(cyclesBeforeBatch) + 1 > TenantLifecyclePolicy.MAX_SUCCESSFUL_EXPORT_CYCLES) {
             throw new IllegalStateException("Maximum successful export cycles reached");
         }
         successfulExportCycles = cycleNumber;
@@ -184,4 +199,11 @@ public final class PackageLifecycle {
     public Optional<Instant> purgedAt() { return Optional.ofNullable(purgedAt); }
     public boolean finalApprovalGranted() { return finalApprovalGranted; }
     public Instant updatedAt() { return updatedAt; }
+
+    private int cyclesOfBatch(int cyclesBeforeBatch) {
+        if (cyclesBeforeBatch < 0 || cyclesBeforeBatch > successfulExportCycles) {
+            throw new IllegalStateException("Cycles before the batch must be between 0 and the case's successful cycles");
+        }
+        return successfulExportCycles - cyclesBeforeBatch;
+    }
 }

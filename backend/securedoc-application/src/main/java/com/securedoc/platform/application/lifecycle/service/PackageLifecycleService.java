@@ -10,6 +10,7 @@ import com.securedoc.platform.application.lifecycle.result.RetentionPurgeResult;
 import com.securedoc.platform.application.port.in.ExtendTechnicalHoldUseCase;
 import com.securedoc.platform.application.port.in.GetPackageLifecycleQuery;
 import com.securedoc.platform.application.port.in.PurgeDueRetentionUseCase;
+import com.securedoc.platform.application.port.out.CaseBatchScope;
 import com.securedoc.platform.application.port.out.ArtifactRepository;
 import com.securedoc.platform.application.port.out.DocumentRepository;
 import com.securedoc.platform.application.port.out.PackageExportRecordRepository;
@@ -65,6 +66,8 @@ public final class PackageLifecycleService implements GetPackageLifecycleQuery,
     private final ProductTelemetryService productTelemetryService;
     /** Task 0028: retention per export destination; {@link ExportCopyRetention#none()} keeps the rules from before. */
     private final ExportCopyRetention exportRetention;
+    /** Task 0104: the case's batches; {@link CaseBatchScope#singleBatch()} keeps the rules from before. */
+    private final CaseBatchScope caseBatches;
 
     public PackageLifecycleService(TenantLifecyclePolicyRepository policyRepository,
                                    PackageLifecycleRepository lifecycleRepository,
@@ -123,6 +126,25 @@ public final class PackageLifecycleService implements GetPackageLifecycleQuery,
                                    ProcessingIncidentService processingIncidentService,
                                    ProductTelemetryService productTelemetryService,
                                    ExportCopyRetention exportRetention) {
+        this(policyRepository, lifecycleRepository, exportRecordRepository, packageRepository, dashboardVisibilityPort,
+                documentRepository, artifactRepository, erasure, auditService, processingIncidentService,
+                productTelemetryService, exportRetention, CaseBatchScope.singleBatch());
+    }
+
+    public PackageLifecycleService(TenantLifecyclePolicyRepository policyRepository,
+                                   PackageLifecycleRepository lifecycleRepository,
+                                   PackageExportRecordRepository exportRecordRepository,
+                                   PackageRepository packageRepository,
+                                   PackageDashboardVisibilityPort dashboardVisibilityPort,
+                                   DocumentRepository documentRepository,
+                                   ArtifactRepository artifactRepository,
+                                   ErasurePort erasure,
+                                   AuditService auditService,
+                                   ProcessingIncidentService processingIncidentService,
+                                   ProductTelemetryService productTelemetryService,
+                                   ExportCopyRetention exportRetention,
+                                   CaseBatchScope caseBatches) {
+        this.caseBatches = Objects.requireNonNull(caseBatches);
         this.policyRepository = Objects.requireNonNull(policyRepository);
         this.lifecycleRepository = Objects.requireNonNull(lifecycleRepository);
         this.exportRecordRepository = Objects.requireNonNull(exportRecordRepository);
@@ -149,7 +171,16 @@ public final class PackageLifecycleService implements GetPackageLifecycleQuery,
 
     /** Returns the next business-successful export cycle without consuming it. */
     public int nextExportCycle(PackageId packageId, TenantId tenantId) {
-        return lifecycleFor(packageId, tenantId).nextExportCycle();
+        PackageLifecycle lifecycle = lifecycleFor(packageId, tenantId);
+        return lifecycle.nextExportCycle(caseBatches.cyclesBeforeCurrentBatch(tenantId, packageId));
+    }
+
+    /**
+     * Task 0104: the documents the next export delivers: the current batch's, when the case has more than one batch;
+     * empty means every document of the case, as before.
+     */
+    public java.util.Optional<java.util.Set<java.util.UUID>> currentBatchDocuments(PackageId packageId, TenantId tenantId) {
+        return caseBatches.currentBatchDocuments(tenantId, packageId);
     }
 
     /** True only when policy requires approval and this export cycle has not already been approved. */
@@ -186,11 +217,13 @@ public final class PackageLifecycleService implements GetPackageLifecycleQuery,
         TenantLifecyclePolicy clockPolicy = masterCopyHours == policy.redactedCacheHours() ? policy
                 : new TenantLifecyclePolicy(policy.tenantId(), policy.originalRetentionHours(), masterCopyHours,
                         policy.neverExportedHoldHours(), policy.finalApprovalRequired(), policy.updatedAt());
-        lifecycle.recordSuccessfulExport(cycleNumber, exportedAt, clockPolicy);
+        lifecycle.recordSuccessfulExport(cycleNumber, exportedAt, clockPolicy,
+                caseBatches.cyclesBeforeCurrentBatch(tenantId, packageId));
         PackageExportRecord record = PackageExportRecord.create(
                 tenantId, packageId, cycleNumber, destinationType, exportedAt, correlationId, documents);
         exportRecordRepository.save(record);
         lifecycleRepository.save(lifecycle);
+        caseBatches.currentBatchDelivered(tenantId, packageId, cycleNumber);
 
         auditService.recordSuccess(
                 tenantId, systemActor(), AuditAction.PACKAGE_EXPORT_RECORDED,

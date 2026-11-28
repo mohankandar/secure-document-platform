@@ -48,6 +48,31 @@ class PackageDocumentExportServiceTest {
         verify(f.lifecycle, never()).recordSuccessfulExport(any(), any(), anyInt(), anyString(), anyList(), any());
     }
 
+    @Test
+    void aLaterBatchDeliversOnlyItsOwnDocuments() {
+        // Task 0104, step 3: the case's earlier document was delivered by batch 1; batch 2 brings one new version.
+        Fixture f = fixture();
+        Instant now = Instant.now();
+        Document newVersion = Document.reconstitute(DocumentId.generate(), f.tenant, f.pkg.id(), FileName.of("v2.pdf"),
+                MimeType.pdf(), 10, Checksum.sha256("c".repeat(64)), DocumentType.PDF, now,
+                DocumentStatus.PROCESSED, List.of(), now);
+        Artifact artifact = Artifact.create(f.tenant, newVersion.id(), ArtifactType.REDACTED, MimeType.pdf(), 10,
+                Checksum.sha256("d".repeat(64)));
+        artifact.markAvailable(ArtifactStorageReference.local("redacted/v2.pdf"));
+        when(f.documents.findByPackageIdAndTenantId(f.pkg.id(), f.tenant)).thenReturn(List.of(f.document, newVersion));
+        when(f.artifacts.findByDocumentIdAndTenantId(newVersion.id(), f.tenant)).thenReturn(List.of(artifact));
+        when(f.storage.retrieve(artifact.storageReference())).thenReturn(new ByteArrayInputStream("PDF-CONTENT".getBytes()));
+        when(f.lifecycle.currentBatchDocuments(f.pkg.id(), f.tenant)).thenReturn(Optional.of(Set.of(newVersion.id().value())));
+        var ref = new DeliveryPort.DeliveryReference(newVersion.id(), "source-doc-2", "document-store", "store-doc-2", "store://sub/doc2");
+        when(f.delivery.deliverBatch(any())).thenReturn(new DeliveryPort.BatchDeliveryReference("document-store", "store-sub-2", List.of(ref)));
+
+        var result = f.service.execute(ExportPackageDocumentsCommand.of(f.pkg.id(), f.tenant, CorrelationId.generate()));
+
+        assertEquals(1, result.exportedDocumentCount());
+        verify(f.delivery).deliverBatch(argThat(batch -> batch.items().size() == 1
+                && batch.items().getFirst().documentId().equals(newVersion.id())));
+    }
+
     private Fixture fixture() {
         TenantId tenant = TenantId.generate();
         ActorId actor = ActorId.generate();
@@ -80,10 +105,11 @@ class PackageDocumentExportServiceTest {
 
         PackageDocumentExportService service = new PackageDocumentExportService(documents, packages, businesses, artifacts,
                 storage, delivery, submissions, lifecycle, audit);
-        return new Fixture(tenant, pkg, document, service, delivery, lifecycle);
+        return new Fixture(tenant, pkg, document, service, delivery, lifecycle, documents, artifacts, storage);
     }
 
     private record Fixture(TenantId tenant, DocumentPackage pkg, Document document,
                            PackageDocumentExportService service, DeliveryPort delivery,
-                           PackageLifecycleService lifecycle) { }
+                           PackageLifecycleService lifecycle, DocumentRepository documents,
+                           ArtifactRepository artifacts, StoragePort storage) { }
 }

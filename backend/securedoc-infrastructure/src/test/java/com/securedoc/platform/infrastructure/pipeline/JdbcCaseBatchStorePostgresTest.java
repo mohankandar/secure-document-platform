@@ -115,6 +115,45 @@ class JdbcCaseBatchStorePostgresTest {
         }
     }
 
+    @Test
+    void theCurrentBatchScopesTheExportAndItsCycleLimit() throws Exception {
+        // Task 0104, step 3: a case of one batch delivers every document; a later batch only its own, and the cycles that
+        // delivered the batches before it do not count against its limit.
+        try (PostgresTestDatabase db = PostgresTestDatabase.migrated("cbsscope")) {
+            NamedParameterJdbcTemplate jdbc = db.jdbc();
+            TenantId tenant = TenantId.generate();
+            TestRows.tenant(jdbc, tenant);
+            UUID pkgId = pkg(jdbc, tenant, UUID.randomUUID(), "COMPLETED", "2026-11-01T10:00:00Z");
+            PackageId pkg = PackageId.of(pkgId);
+            JdbcCaseBatchStore store = new JdbcCaseBatchStore(jdbc);
+
+            assertEquals(0, store.cyclesBeforeCurrentBatch(tenant, pkg), "no batches: as before");
+            assertTrue(store.currentBatchDocuments(tenant, pkg).isEmpty());
+            store.currentBatchDelivered(tenant, pkg, 1); // no batch row: nothing to mark, no failure
+
+            CaseBatchStore.Batch first = store.openBatch(tenant, pkg, "WATCHED_FOLDER", Instant.now());
+            UUID v1 = document(jdbc, tenant, pkgId, UUID.randomUUID());
+            jdbc.update("UPDATE documents SET batch_id = :b WHERE id = :id", new MapSqlParameterSource("b", first.id()).addValue("id", v1));
+            assertTrue(store.currentBatchDocuments(tenant, pkg).isEmpty(), "batch 1 delivers every document");
+            store.currentBatchDelivered(tenant, pkg, 1);
+            store.currentBatchDelivered(tenant, pkg, 2); // a re-export of batch 1
+            assertEquals(0, store.cyclesBeforeCurrentBatch(tenant, pkg));
+
+            CaseBatchStore.Batch second = store.openBatch(tenant, pkg, "WATCHED_FOLDER", Instant.now());
+            UUID v2 = document(jdbc, tenant, pkgId, UUID.randomUUID());
+            jdbc.update("UPDATE documents SET batch_id = :b WHERE id = :id", new MapSqlParameterSource("b", second.id()).addValue("id", v2));
+            assertEquals(java.util.Set.of(v2), store.currentBatchDocuments(tenant, pkg).orElseThrow(), "only the new batch's documents");
+            assertEquals(2, store.cyclesBeforeCurrentBatch(tenant, pkg), "batch 1 took cycles 1 and 2");
+
+            store.currentBatchDelivered(tenant, pkg, 3);
+            assertEquals(3, jdbc.queryForObject("SELECT export_cycle FROM case_batches WHERE id = :id",
+                    new MapSqlParameterSource("id", second.id()), Integer.class));
+            assertEquals("DELIVERED", jdbc.queryForObject("SELECT state FROM case_batches WHERE id = :id",
+                    new MapSqlParameterSource("id", second.id()), String.class));
+            assertEquals(2, store.cyclesBeforeCurrentBatch(tenant, pkg), "its own cycles never count as before it");
+        }
+    }
+
     private static UUID pkg(NamedParameterJdbcTemplate jdbc, TenantId tenant, UUID record, String status, String at) {
         UUID id = UUID.randomUUID();
         jdbc.update("""

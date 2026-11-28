@@ -1174,11 +1174,12 @@ public class ApplicationServiceConfig {
             AuditService auditService,
             ProcessingIncidentService processingIncidentService,
             ProductTelemetryService productTelemetryService,
-            com.securedoc.platform.application.lifecycle.service.ExportRetentionService exportRetentionService) {
+            com.securedoc.platform.application.lifecycle.service.ExportRetentionService exportRetentionService,
+            com.securedoc.platform.application.port.out.CaseBatchScope caseBatchScope) {
         return new PackageLifecycleService(tenantLifecyclePolicyRepository, packageLifecycleRepository,
                 packageExportRecordRepository, packageRepository, packageDashboardVisibilityPort,
                 documentRepository, artifactRepository, erasure, auditService, processingIncidentService,
-                productTelemetryService, exportRetentionService);
+                productTelemetryService, exportRetentionService, caseBatchScope);
     }
 
     /** Task 0028: retention per export destination (master and each split destination), set by the Business Admin. */

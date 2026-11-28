@@ -77,7 +77,7 @@ public final class PackageDocumentExportService implements ExportPackageDocument
         DocumentPackage pkg = packageRepository.findByIdAndTenantId(command.packageId(), command.tenantId())
                 .orElseThrow(() -> new NotFoundException("DocumentPackage", command.packageId().toString()));
 
-        List<Document> documents = documentRepository.findByPackageIdAndTenantId(command.packageId(), command.tenantId())
+        List<Document> documents = documentsOfThisExport(command.packageId(), command.tenantId())
                 .stream().sorted(Comparator.comparing(document -> document.id().toString())).toList();
         if (documents.isEmpty()) throw new ValidationException(LvErrorCode.DLV_011, "Package has no documents to export");
         if (documents.stream().anyMatch(document -> document.status() != DocumentStatus.PROCESSED)) {
@@ -228,6 +228,19 @@ public final class PackageDocumentExportService implements ExportPackageDocument
     }
 
     /**
+     * Task 0104: an export delivers only the current batch's documents and versions (design CASE_VERSIONS.md, section 5).
+     * A case of one batch delivers every document, as before. Documents of earlier batches were delivered by their own
+     * cycle and are not sent again.
+     */
+    private List<Document> documentsOfThisExport(com.securedoc.platform.domain.identity.PackageId packageId,
+                                                 com.securedoc.platform.domain.identity.TenantId tenantId) {
+        List<Document> all = documentRepository.findByPackageIdAndTenantId(packageId, tenantId);
+        return lifecycleService.currentBatchDocuments(packageId, tenantId)
+                .map(batch -> all.stream().filter(document -> batch.contains(document.id().value())).toList())
+                .orElse(all);
+    }
+
+    /**
      * Task 0028: the case run's submission rebuilt from the stored redacted copies (see
      * {@link DeliverySubmission#rebuild}). Each copy is read back and must match its stored checksum, so a damaged or
      * missing copy is found here and not by the destination. The identities are kept: the next attempt sends the same
@@ -244,7 +257,7 @@ public final class PackageDocumentExportService implements ExportPackageDocument
                 .findByTenantIdAndPackageIdAndExportCycle(tenantId, packageId, exportCycle).orElse(null);
         if (submission == null || submission.status() == DeliverySubmissionStatus.DELIVERED) return false;
         List<DeliverySubmission.NewDocument> copies = new ArrayList<>();
-        for (Document document : documentRepository.findByPackageIdAndTenantId(packageId, tenantId)) {
+        for (Document document : documentsOfThisExport(packageId, tenantId)) {
             Artifact artifact = artifactRepository.findByDocumentIdAndTenantId(document.id(), tenantId).stream()
                     .filter(a -> a.artifactType() == ArtifactType.REDACTED && a.isAvailable())
                     .max(Comparator.comparing(Artifact::createdAt))
