@@ -85,6 +85,12 @@ async function step(name, body) {
   } catch (e) {
     results.push({ name, ok: false, seconds: Math.round((Date.now() - t0) / 1000), detail: e.message });
     console.log(`FAIL ${name} - ${e.message}`);
+    if (appLog && existsSync(appLog)) {
+      // The app's error lines (messages and codes only; the app never logs a value, password or token).
+      const lines = readFileSync(appLog, 'utf8').split(/\r?\n/).filter((l) => /"level":"(ERROR|WARN)"|LV-[A-Z]{3}-\d{3}|Exception/.test(l));
+      const message = (l) => { try { return String(JSON.parse(l).message); } catch { return l; } };
+      for (const l of lines.slice(-15)) console.log(`  app: ${message(l).slice(0, 500)}`);
+    }
     throw e;
   }
 }
@@ -334,9 +340,10 @@ function setupAndFirstEntity(inst) {
 
 /* ---------- the app ---------- */
 let app;
+let appLog;
 const logOf = (inst, label) => join(inst.root, 'logs', `app-${label}.log`);
 async function startApp(inst, label, jar = inst.jar) {
-  const log = logOf(inst, label);
+  const log = (appLog = logOf(inst, label));
   writeFileSync(log, '');
   // As the install guide says: java -jar lexavault.jar, no profile; the settings are in the environment.
   app = spawn('java', [`-Djava.io.tmpdir=${join(inst.root, 'tmp')}`, '-jar', jar, '--spring.main.banner-mode=off'],
