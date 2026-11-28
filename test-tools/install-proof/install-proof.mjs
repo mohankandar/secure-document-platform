@@ -267,7 +267,8 @@ try {
   });
 
   await step('4. One document end to end (intake, redaction, delivery)', async () => {
-    const identifiers = { contract_number: `114${Date.now() % 10_000_000}`.slice(0, 10), member_number: '7114001', service_entity: '001' };
+    // The demo entity's case fields: a 12-digit contract number, an 11-digit member number, a service entity.
+    const identifiers = { contract_number: `114${String(Date.now()).slice(-9)}`, member_number: '71140000001', service_entity: '001' };
     packageId = (await call('POST', '/api/v1/packages', { packageType: 'MANUAL_UPLOAD', metadata: { source: 'install-proof' },
       businessIdentifiers: identifiers })).packageId;
     const form = new FormData();
