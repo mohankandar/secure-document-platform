@@ -34,7 +34,7 @@ Decided (design chat, 21:15): the row **keeps** its reason ("why it stopped") an
 
 ## Proof run tonight (rule 9: targeted; rule 11: `-Dmaven.repo.local=C:\dev\lexavault\m2-queue-B`, nothing installed)
 - `mvn -Pdev-build verify -pl securedoc-api -am` with a throwaway PostgreSQL 16 container (`lv-0108-pg`, port 55408; removed): domain 91, application 416, infrastructure 217 (2 skipped), API 992 (5 skipped); 0 failures. New: `CaseViewServiceTest` (6), `CaseViewStorePostgresTest` (1, migration 089 included), `CaseViewControllerTest` (1).
-- Frontend, `LV_E2E_PORT_BASE=15275`: type check clean. `test:standalone` first run: auth, vocabulary, ui-framework passed; oidc-signin 235 passed, **2 failed** (`exports.spec.ts` chips at 1024 px, caused by my Received column; fixed as above). After the fix: `exports.spec.ts` + `caseRows.spec.ts` 34 passed; `cases0108.spec.ts` (new, 3 tests × light/dark) + `cases0111.spec.ts` 12 passed. Re-run of oidc-signin, tablet and a11y: see the line below.
+- Frontend, `LV_E2E_PORT_BASE=15275`: type check clean. `test:standalone` first run: auth, vocabulary, ui-framework passed; oidc-signin 235 passed, **2 failed** (`exports.spec.ts` chips at 1024 px, caused by my Received column; fixed as above). After the fix: `exports.spec.ts` + `caseRows.spec.ts` 34 passed; `cases0108.spec.ts` (new, 3 tests × light/dark) + `cases0111.spec.ts` 12 passed. Re-run: oidc-signin **237 passed**, tablet **110 passed**, a11y **stopped at the 21:50 stop after 250 of 392 passed, 0 failed** (the rest to run next session).
 - Left for later parts / the milestone: the 400+ case test, iPad sizes, screenshots, the per-state panel test.
 
 ## Product names
