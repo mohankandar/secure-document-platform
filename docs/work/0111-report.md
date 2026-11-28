@@ -21,7 +21,6 @@ Branch `feature/0111-small-fixes`, from `origin/feature/lexavault-r1b-tenant-ide
 
 ## What was run
 
-(see the end of this file)
 
 ## Questions
 
@@ -30,3 +29,27 @@ Branch `feature/0111-small-fixes`, from `origin/feature/lexavault-r1b-tenant-ide
 3. Item 10b and item 9: which file and page showed the partly covered form field, and the tilted licence? A follow-up task can take both with the owner's files.
 
 No other product's name or behaviour in code. Known exception unchanged: `SdvDeliveryAdapter` (switch-over part 3).
+
+## What was run (rule 9: targeted; rule 11: `mvn verify` with `-Dmaven.repo.local=C:\dev\lexavault\m2-queue-B`, nothing installed)
+
+- Backend: `cd backend; mvn -o -Pdev-build -Dmaven.repo.local=C:/dev/lexavault/m2-queue-B verify`. Domain 91, application 410 (with the new `EmptyCaseExpiryServiceTest`, 2), scan bridge 144, infrastructure 216 (88 skipped: PostgreSQL tests, no throwaway database this time), API 986 (121 skipped). All passed except `ProtectionRulesTest.everyScheduledTaskIsGatedButTheSignsOfLife`, which failed as designed: it counts scheduled tasks and asks each new one to be decided. **Test changed, stated:** the count is now 12; the new expiry job is gated (it changes cases), not "always". Rerun: 7/7 pass. New: `CommentNoteIconTest` 3/3; `PackageListExportStateTest` checks that `dashboard=true` takes the dashboard query.
+- Frontend: `test:auth` 10, `test:vocabulary` 251 (with the new U4/U5 and Cancelled tests), `test:ui-framework` 19 (it first failed: my CSS had raw colours; fixed with tokens), `test:oidc-signin` 237, `test:tablet` 110 (it first failed: its case-list route did not answer the new query string; **test changed, stated:** the route now accepts a query). New `e2e-a11y/cases0111.spec.ts` 3/3 (light). **Not run locally:** the full `test:a11y` suite (time); CI runs it.
+- `score.mjs` checked with a small fixture: "unread pages: 1; pages OCR cannot read, held for a person: 1".
+- `Start-LexaVault-Local.ps1` parses (PowerShell parser); not started (the owner's app owns the ports).
+- No two-server proof (no pipeline change across servers).
+
+## TO-TEST entry (add to `queue\TO-TEST.md` when merged)
+
+## 2026-11-27 · 0111 · Small fixes from your tests
+- What changed: true case counts with "Show more"; cancelled and hidden cases off the Cases page; cases with no documents close after 7 days; New case fields stop at their length and list choices in code order; Review says "Draw the box first."; comment-note icons no longer drawn in delivered files; the benchmark counts OCR-unreadable pages apart; the start script defaults to qwen3.5:9b, batch 2, and checks the vision model.
+- How to test:
+  1. Update and start as usual (`Update-And-Start.ps1`). The start window says "Ollama vision model qwen3-vl:8b-instruct is installed."
+  2. Cases page: each group's number matches the database (e.g. Exported shows all your completed cases, not 20). A group with more than 25 cases shows "Show 25 more (N not shown)"; press it.
+  3. The cancelled case is no longer listed. About a minute after the start, the case a61f2900… (no documents since 2026-11-16) leaves the list too. Both still count in Reports.
+  4. Click a case row, close the panel with ✕, click the same row again, then another row: the panel opens every time.
+  5. New case: in a field with a set length (e.g. a 10-character loan number), try typing an 11th character. Open a dropdown field: the choices go 000, 001, 002 …
+  6. Review: pick a finding that says "Location unknown": next to the greyed-out Redact button it says "Draw the box first." Draw the box: Redact works.
+  7. Drop a PDF with a sticky-note comment: the delivered file shows neither the comment nor its icon.
+- What you should see: as above. Old screens and everything else unchanged.
+- What would be a failure: a group count smaller than the real number of cases; "Unrecognized" anywhere; a case with documents closed as expired; a field that refuses a valid value (e.g. an SSN typed with dashes); a note icon in a delivered file.
+- Not in this round (see the 0111 report): the box on tilted photos (R5), the form-field box case (R6, second half), and the "Required on every field" message (U6, could not reproduce: which screen and click?). The 7 days is a server setting for now; a Business Admin setting per entity needs your yes (schema change).

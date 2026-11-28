@@ -348,6 +348,7 @@ class StagedPipelinePostgresTest {
                         Confidence.of(0.0), DetectorSource.of("second-check", "SSN")));
                 return null;
             }
+            if (keepsNothing.remove(d.id())) return null; // task 0112: a run that keeps nothing and asks no one
             d.completeProcessing();
             documents.save(d);
             // As the real redaction: the final check is audited (ids only).
@@ -464,6 +465,99 @@ class StagedPipelinePostgresTest {
         service.plan(trigger(pkg));
         runAll(PipelineStage.REDACT);
         verify(exports, times(1)).queueCaseExport(eq(pkg.tenantId()), eq(pkg.id()), eq(1), any());
+    }
+
+    private final java.util.Set<com.securedoc.platform.domain.identity.DocumentId> keepsNothing =
+            java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+    /**
+     * Task 0112: the review's own path. The person checks the page the final check held; the review moves the case to
+     * PROCESSING first (FocusedReviewService), then triggers it. The finished redaction runs again, with its final
+     * check, and the case ends in its export. It stayed PROCESSING for ever before.
+     */
+    @Test
+    void aPageTheFinalCheckHeldAndAPersonCheckedRunsTheRedactionAgainAndTheCaseFinishes() {
+        DocumentPackage pkg = submittedCase(2);
+        var documentIds = documents.findByPackageIdAndTenantId(pkg.id(), pkg.tenantId()).stream()
+                .map(Document::id).toList();
+        secondCheckFinds.add(documentIds.get(0));
+        service.plan(trigger(pkg));
+        runAll(PipelineStage.TEXT);
+        runAll(PipelineStage.FIND);
+        runAll(PipelineStage.REDACT);
+        assertEquals(PackageStatus.PENDING_REVIEW, status(pkg));
+        assertTrue(jobsOf(pkg).stream().anyMatch(j -> j.stage() == PipelineStage.REDACT
+                && StagedProcessingService.HELD_FOR_A_PERSON.equals(j.lastDetail())), "the held run says so");
+
+        Finding page = findings.findByDocumentIdAndTenantId(documentIds.get(0), pkg.tenantId()).get(0);
+        page.dismiss(ActorId.generate(), "Page reviewed by hand");
+        tx.executeWithoutResult(s -> {
+            findings.save(page);
+            DocumentPackage loaded = packages.findByIdAndTenantId(pkg.id(), pkg.tenantId()).orElseThrow();
+            loaded.resumeProcessingAfterReview();
+            packages.save(loaded);
+        });
+        service.plan(trigger(pkg));
+        assertTrue(jobsOf(pkg).stream().anyMatch(j -> j.stage() == PipelineStage.REDACT
+                && j.status() == PipelineJobStatus.READY), "the held document is redacted again");
+        runAll(PipelineStage.REDACT);
+        assertEquals(DocumentStatus.PROCESSED, documents.findByIdAndTenantId(documentIds.get(0), pkg.tenantId())
+                .orElseThrow().status());
+        verify(exports, times(1)).queueCaseExport(eq(pkg.tenantId()), eq(pkg.id()), eq(1), any());
+        assertEquals(2, count(pkg, PipelineStage.REDACT), "the same job ran again; nothing was added");
+    }
+
+    /** Task 0112: held again after the person's check, it goes back to Review, never to export. */
+    @Test
+    void heldAgainAfterThePersonsCheckTheCaseGoesBackToReview() {
+        DocumentPackage pkg = submittedCase(1);
+        DocumentId documentId = document(pkg).id();
+        secondCheckFinds.add(documentId);
+        service.plan(trigger(pkg));
+        runAll(PipelineStage.TEXT);
+        runAll(PipelineStage.FIND);
+        runAll(PipelineStage.REDACT);
+        for (int round = 0; round < 2; round++) {
+            assertEquals(PackageStatus.PENDING_REVIEW, status(pkg));
+            Finding page = findings.findByDocumentIdAndTenantId(documentId, pkg.tenantId()).stream()
+                    .filter(f -> f.status() == com.securedoc.platform.domain.finding.FindingStatus.DETECTED)
+                    .findFirst().orElseThrow();
+            page.dismiss(ActorId.generate(), "Page reviewed by hand");
+            if (round == 0) secondCheckFinds.add(documentId);
+            tx.executeWithoutResult(s -> {
+                findings.save(page);
+                DocumentPackage loaded = packages.findByIdAndTenantId(pkg.id(), pkg.tenantId()).orElseThrow();
+                loaded.resumeProcessingAfterReview();
+                packages.save(loaded);
+            });
+            service.plan(trigger(pkg));
+            runAll(PipelineStage.REDACT);
+            if (round == 0) {
+                verify(exports, times(0)).queueCaseExport(any(), any(), org.mockito.ArgumentMatchers.anyInt(), any());
+            }
+        }
+        verify(exports, times(1)).queueCaseExport(eq(pkg.tenantId()), eq(pkg.id()), eq(1), any());
+    }
+
+    /**
+     * Task 0112 guard: a case in PROCESSING whose document waits for redaction, its run finished and nothing planned,
+     * stops with LV-PRC-011 (shown as Stopped) instead of staying stuck in silence. Nothing is exported.
+     */
+    @Test
+    void aCaseWithNothingPlannedStopsWithPrc011() {
+        DocumentPackage pkg = submittedCase(1);
+        DocumentId documentId = document(pkg).id();
+        keepsNothing.add(documentId);
+        service.plan(trigger(pkg));
+        runAll(PipelineStage.TEXT);
+        runAll(PipelineStage.FIND);
+        runAll(PipelineStage.REDACT);
+        assertEquals(PackageStatus.FAILED, status(pkg));
+        assertTrue(audits.stream().anyMatch(a -> a.action() == AuditAction.PACKAGE_PROCESSING_RECOVERY_EXHAUSTED
+                && a.detail().contains("LV-PRC-011")));
+        verify(incidents).recordNothingPlanned(eq(pkg.tenantId()), eq(pkg.id()), any());
+        verify(exports, times(0)).queueCaseExport(any(), any(), org.mockito.ArgumentMatchers.anyInt(), any());
+        assertEquals(Optional.empty(), service.claimNext(PipelineStage.REDACT, "server-b/redact-worker-1"));
     }
 
     @Test
