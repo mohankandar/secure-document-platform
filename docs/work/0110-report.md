@@ -1,7 +1,7 @@
 # Report 0110: hardening, part 2
 
 Date: 2026-11-27
-Branch: `feature/0110-hardening-part2`, from `origin/feature/lexavault-r1b-tenant-identity` at `7c56856` (independent of 0112). Worktree `C:\dev\lexavault\lv-queue-a-0110`, so the 0112 owner round in `lv-queue-b` kept its build.
+Branch: `feature/0110-hardening-part2-r` (the earlier pushed branch rebased onto `7736cca`; the old one is left as it was), from `origin/feature/lexavault-r1b-tenant-identity` at `7c56856` (independent of 0112). Worktree `C:\dev\lexavault\lv-queue-a-0110`, so the 0112 owner round in `lv-queue-b` kept its build.
 Outcome: **DONE** (PR to follow on green CI). Items 2 to 5 in the first two sessions (2026-11-27); item 1 wired in the third (2026-11-28, rebased onto `7736cca`).
 
 ## Done
@@ -22,7 +22,7 @@ Outcome: **DONE** (PR to follow on green CI). Items 2 to 5 in the first two sess
 - First session: `mvn -o -Pdev-build install -DskipTests`; `EveryEndpointHasARuleTest`, `CapabilityAuthorizationInterceptorTest` (13); code list tests (registry, guide, frontend file); `PollingAnswerSizeLimitTest`, `SecretReferencesApprovedNamesTest`, polling intake tests (44); the whole `securedoc-infrastructure` module on a throwaway PostgreSQL (217, 0 failed, 2 skipped).
 - Second session: `TextModelStartCheckTest` (7), `OllamaVisionModelAdapterTest` (11), `OllamaModelPreloaderTest` (3), `OutboundAddressRuleTest` (6); `mvn -o -Pdev-build install -pl securedoc-ai,securedoc-api`: 996 tests, 0 failed, 121 skipped (the PostgreSQL tests, no throwaway database this run), BUILD SUCCESS; `Start-LexaVault-Local.ps1` parsed with the PowerShell parser and its digest comparison run against the local Ollama (qwen3.5:9b matches).
 - Not run: the frontend suites (only a mock server in `e2e-export` changed; CI runs it), the owner's full local start.
-- Third session (item 1): connection, polling, destination and intake tests; `Update-LexaVault-DataDictionary.ps1`; the whole backend `mvn -o -Pdev-build verify` with PostgreSQL tests on a throwaway container: RESULT_BACKEND; frontend `tsc --noEmit`, `npm run test:standalone`: RESULT_FRONTEND. Maven: shared repository (queue A).
+- Third session (item 1): connection, polling, destination and intake tests; `Update-LexaVault-DataDictionary.ps1`; the whole backend `mvn -o -Pdev-build verify` with PostgreSQL tests on a throwaway container: domain 91, application 417, scan bridge 144, infrastructure 218 (2 skipped), API 1007: 11 failed in 4 classes whose test connections used unresolvable stub names or a loaded machine (fixed test-only, then 25/25 on re-run); frontend `tsc --noEmit`, `npm run test:standalone`: vocabulary 252, ui-framework 19, OIDC 237, tablet 110, a11y 386 passed. Maven: shared repository (queue A).
 
 ## Left
 - Nothing. Left for the milestone: the full proof set.
