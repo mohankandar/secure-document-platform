@@ -88,6 +88,21 @@ final class PostgresTestDatabase implements AutoCloseable {
         liquibase.rollback(changeSets, (String) null);
     }
 
+    /**
+     * Task 0118: how many change sets ran from the first one whose id starts with {@code idPrefix} to the end, so a test
+     * rolls back exactly to before that file, whatever ran after it (090, the comments, always runs last).
+     */
+    static int changeSetsFrom(Connection connection, String idPrefix) throws Exception {
+        try (var ps = connection.prepareStatement("SELECT count(*) FROM databasechangelog WHERE orderexecuted >="
+                + " (SELECT min(orderexecuted) FROM databasechangelog WHERE id LIKE ?)")) {
+            ps.setString(1, idPrefix + "%");
+            try (var rs = ps.executeQuery()) {
+                rs.next();
+                return rs.getInt(1);
+            }
+        }
+    }
+
     /** Back to 050, the storage before the redaction catalog (070, task 0062): undoes every change set after it. */
     void backTo050() throws Exception {
         try (Connection connection = connection()) {

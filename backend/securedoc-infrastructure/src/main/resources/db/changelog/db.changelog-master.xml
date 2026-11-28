@@ -74,4 +74,6 @@
     <include file="db/changelog/072-intake-refusals.xml"/>
     <include file="db/changelog/085-document-context.xml"/>
     <include file="db/changelog/067-destination-profiles.xml"/>
+    <!-- Task 0118: last, after every table and column exists. -->
+    <include file="db/changelog/090-schema-comments.xml"/>
 </databaseChangeLog>

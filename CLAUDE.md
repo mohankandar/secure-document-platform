@@ -41,6 +41,10 @@ Related repositories on this machine:
 **R1B guardrails**
 - Sign-in uses platform-core identity; shared-issuer is the normal path. The old R1B setting and migration 037 are removed.
 
+**Database (task 0118)**
+- Before writing SQL, a query for the owner, or a migration: read docs/data/DATA-DICTIONARY.md. Every new table or column needs a comment in its changelog.
+- LexaVault tables: `remarks` in the changelog. platform-core tables: `backend/securedoc-api/src/main/resources/db/comments/platform-tables.sql`. Then run `scripts\Update-LexaVault-DataDictionary.ps1` and commit `docs/data`. CI fails on a missing comment or a stale dictionary.
+
 **Secrets**
 - No secrets in the repository, in logs or in the chat.
 - Never open, print or copy anything under `C:\dev\sdv\secrets`.

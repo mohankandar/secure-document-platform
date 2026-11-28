@@ -22,7 +22,8 @@ class DestinationProfilesMigrationPostgresTest {
         try (PostgresTestDatabase db = PostgresTestDatabase.migrated("m067")) {
             NamedParameterJdbcTemplate jdbc = db.jdbc();
             try (Connection connection = db.connection()) {
-                PostgresTestDatabase.rollback(PostgresTestDatabase.liquibase(connection), connection, 1); // a 0094 database
+                PostgresTestDatabase.rollback(PostgresTestDatabase.liquibase(connection), connection,
+                        PostgresTestDatabase.changeSetsFrom(connection, "067-")); // a 0094 database (090 too, when it ran)
             }
             TenantId tenant = TenantId.generate();
             PackageId pkg = PackageId.generate();
@@ -50,7 +51,8 @@ class DestinationProfilesMigrationPostgresTest {
             jdbc.update("UPDATE delivery_submissions SET destination_progress = '{}' WHERE id = :id", new MapSqlParameterSource("id", submission));
             Exception refused = assertThrows(Exception.class, () -> {
                 try (Connection connection = db.connection()) {
-                    PostgresTestDatabase.rollback(PostgresTestDatabase.liquibase(connection), connection, 1);
+                    PostgresTestDatabase.rollback(PostgresTestDatabase.liquibase(connection), connection,
+                            PostgresTestDatabase.changeSetsFrom(connection, "067-"));
                 }
             });
             assertTrue(String.valueOf(refused).contains("DESTINATION_PROGRESS_OPEN")
@@ -59,7 +61,8 @@ class DestinationProfilesMigrationPostgresTest {
                     new MapSqlParameterSource(), Integer.class));
             jdbc.update("UPDATE delivery_submissions SET status = 'DELIVERED' WHERE id = :id", new MapSqlParameterSource("id", submission));
             try (Connection connection = db.connection()) {
-                PostgresTestDatabase.rollback(PostgresTestDatabase.liquibase(connection), connection, 1);
+                PostgresTestDatabase.rollback(PostgresTestDatabase.liquibase(connection), connection,
+                            PostgresTestDatabase.changeSetsFrom(connection, "067-"));
             }
             assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM information_schema.columns WHERE column_name IN"
                     + " ('destination_progress', 'destination_settings')", new MapSqlParameterSource(), Integer.class));
