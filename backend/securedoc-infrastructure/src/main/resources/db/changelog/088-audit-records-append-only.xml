@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!--
+        Hardening (task 0110): the audit table is protected by the database. The app's own database user (the one that
+        runs these change sets) may insert and read audit rows, never change, delete or empty them. Nothing in the app
+        changes or deletes an audit row; there is no audit retention purge. A database superuser is not bound by
+        privileges: the app must run as an ordinary role for this to hold (listed for the owner in the 0110 report).
+
+        Included after 087 in the master changelog, not at its end, so the roll-back tests that count change sets from the
+        end need no new count.
+    -->
+    <changeSet id="088-01-audit-records-append-only" author="lexavault" dbms="postgresql">
+        <sql>REVOKE UPDATE, DELETE, TRUNCATE ON audit_records FROM CURRENT_USER</sql>
+        <sql>REVOKE UPDATE, DELETE, TRUNCATE ON audit_records FROM PUBLIC</sql>
+        <rollback>
+            <sql>GRANT UPDATE, DELETE, TRUNCATE ON audit_records TO CURRENT_USER</sql>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

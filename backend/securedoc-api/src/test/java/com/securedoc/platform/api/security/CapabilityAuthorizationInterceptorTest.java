@@ -113,6 +113,25 @@ class CapabilityAuthorizationInterceptorTest {
                 fixture.audits.get(0).detail());
     }
 
+    /** Hardening: endpoints deny by default. */
+    @Test
+    void anEndpointWithoutARuleIsRefusedEvenForTheWidestRoleAndRecordedOnce() throws Exception {
+        var fixture = fixture("DOCUMENT_SUPERVISOR");
+        when(fixture.request.getMethod()).thenReturn("GET");
+        when(fixture.request.getAttribute(HandlerMapping.BEST_MATCHING_PATTERN_ATTRIBUTE)).thenReturn("/api/v1/x");
+        assertThrows(AccessDeniedException.class, () -> fixture.interceptor.preHandle(
+                fixture.request, mock(HttpServletResponse.class), handler("withoutARule")));
+        assertEquals(1, fixture.audits.size());
+        assertEquals("code=LV-AUT-006, detail=NO_RULE, method=GET, route=/api/v1/x", fixture.audits.get(0).detail());
+    }
+
+    @Test
+    void anEndpointMarkedOpenGoesOnWithNoRecord() throws Exception {
+        var fixture = fixture("REPORT_VIEWER");
+        assertTrue(fixture.interceptor.preHandle(fixture.request, mock(HttpServletResponse.class), handler("open")));
+        assertTrue(fixture.audits.isEmpty());
+    }
+
     @Test
     void authorizationFailedDetailIsPrintedInTheAppendix() {
         assertTrue(AppendixDetailAllowList.isAllowed(AuditAction.AUTHORIZATION_FAILED.name()));
@@ -175,5 +194,10 @@ class CapabilityAuthorizationInterceptorTest {
 
         @RequireCapability(UserCapability.TECHNICAL_RETRY)
         public void technicalRetry() {}
+
+        public void withoutARule() {}
+
+        @OpenEndpoint("test")
+        public void open() {}
     }
 }

@@ -112,6 +112,12 @@ public final class DraftConnectionTestService {
 
     private Result run(Kind kind, IntegrationConnection probe) {
         if (probe.providerType() == IntegrationProviderType.HTTP_API) {
+            // Task 0110 (hardening: outbound addresses limited): the same rule as Save and the connections.
+            var refused = OutboundAddressRule.check(probe.endpoint(), probe.allowedHosts(), addressGuard.ruleResolver());
+            if (refused.isPresent() && refused.get() != OutboundAddressRule.Refusal.INVALID) {
+                return Result.failed(refused.get() == OutboundAddressRule.Refusal.NOT_RESOLVED ? ADDRESS_NOT_RESOLVED
+                        : ADDRESS_NOT_ALLOWED);
+            }
             switch (addressGuard.check(probe.endpoint())) {
                 case METADATA_ADDRESS: return Result.failed(ADDRESS_NOT_ALLOWED);
                 case UNRESOLVED: return Result.failed(ADDRESS_NOT_RESOLVED);
