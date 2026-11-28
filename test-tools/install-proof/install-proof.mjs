@@ -171,6 +171,8 @@ function appEnv() {
   return {
     SPRING_DATASOURCE_URL: dbUrl(DB), SPRING_DATASOURCE_USERNAME: APP, SPRING_DATASOURCE_PASSWORD: appPassword,
     PLATFORM_TENANT_CONFIG: `optional:file:${join(run, 'work', 'platform-tenant.properties')}`,
+    // As an install: the schema step made the tables; nothing runs at start (the local profile would run Liquibase).
+    SPRING_LIQUIBASE_ENABLED: 'false',
     SERVER_PORT: String(appPort), SECUREDOC_NODE_ID: 'install-proof',
     SECUREDOC_AI_PROVIDER: 'ollama', SECUREDOC_AI_OLLAMA_BASE_URL: `http://localhost:${aiPort}`,
     SECUREDOC_AI_VISION_BASE_URL: `http://localhost:${aiPort}`, SECUREDOC_AI_MODEL: MODEL,
