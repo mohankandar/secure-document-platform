@@ -62,6 +62,18 @@ public final class Document {
     public static Document create(TenantId tenantId, PackageId packageId, FileName fileName,
                                    MimeType mimeType, long sizeBytes, Checksum checksum,
                                    DocumentType documentType, SensitivityLevel sensitivityLevel) {
+        return createWithId(DocumentId.generate(), tenantId, packageId, fileName, mimeType, sizeBytes, checksum,
+                documentType, sensitivityLevel);
+    }
+
+    /**
+     * Task 0104: a document of a case's next batch, under the id its batch classification gave it up front (so a later
+     * file of the same batch can name it as the version it follows). Otherwise as {@code create}.
+     */
+    public static Document createWithId(DocumentId id, TenantId tenantId, PackageId packageId, FileName fileName,
+                                        MimeType mimeType, long sizeBytes, Checksum checksum,
+                                        DocumentType documentType, SensitivityLevel sensitivityLevel) {
+        Objects.requireNonNull(id, "DocumentId must not be null");
         Objects.requireNonNull(sensitivityLevel, "Sensitivity level must not be null");
         Objects.requireNonNull(tenantId, "TenantId must not be null");
         Objects.requireNonNull(packageId, "PackageId must not be null");
@@ -73,7 +85,7 @@ public final class Document {
             throw new IllegalArgumentException("Size bytes must be >= 0, got: " + sizeBytes);
         }
 
-        return new Document(DocumentId.generate(), tenantId, packageId, fileName, mimeType,
+        return new Document(id, tenantId, packageId, fileName, mimeType,
                 sizeBytes, checksum, documentType, Instant.now(), sensitivityLevel);
     }
 

@@ -76,6 +76,12 @@ The task asks for exactly this (rules 1, 5 and 7), so I read it as approval. I h
 
 Left for the milestone: the full suite and the two-server proof. No frontend change.
 
+
+## Intake building block (same session)
+- **Upload into the next batch:** `UploadDocumentCommand.forNextBatch(..., documentId)` stores a file of a delivered case's next batch under the id its batch classification gave it (`Document.createWithId`), and adds it with `DocumentPackage.addBatchDocument`. While the case is processing, in Review or still being filled, nothing is stored (LV-INT-026). An ordinary upload to a delivered case is still refused, as before.
+- Proof: `UploadDocumentPdfCheckTest` 10 of 10 (3 new), `IntakeStoppedByLicenceTest` 5 of 5, `UploadCaseLockPostgresTest` 7 of 7, the domain's `Document*` tests all pass.
+- **Not wired yet:** no intake calls it. The watched folder, the API and polling, and scan still make a new case for each arrival, so today's behaviour is unchanged on this branch.
+- **For the design chat:** the 50-files-per-case limit (task 0038) counts every document of the case, all batches together. A long-lived contract would reach it and its next batch would be refused, against "never refuse a business resend". Recommended: count the limit per batch. I have not changed it.
 ## Left (next session, in this order; design section 8)
 1. Wire the watched folder, then the API and polling (a reused revision or document id becomes a batch or version), then scan (operator's pick). Until an intake opens batches, every new case is a case of one batch and behaves as before.
 2. `versions.json` in the cycle folder and the version fields in the destination profile.

@@ -146,6 +146,49 @@ class UploadDocumentPdfCheckTest {
         }
     }
 
+
+    /* Task 0104: a file of a delivered case's next batch. */
+
+    private DocumentPackage casIn(com.securedoc.platform.domain.document.PackageStatus status) {
+        DocumentPackage pkg = DocumentPackage.reconstitute(PackageId.generate(), tenantId, PackageType.FOLDER_INTAKE, null,
+                null, null, principal.actorId(), java.time.Instant.now(), status, PackageMetadata.empty(),
+                new java.util.ArrayList<>(), java.time.Instant.now());
+        when(packages.findByIdAndTenantId(pkg.id(), tenantId)).thenReturn(Optional.of(pkg));
+        return pkg;
+    }
+
+    @Test
+    void aFileOfTheNextBatchJoinsTheDeliveredCaseUnderTheIdItsBatchGaveIt() throws Exception {
+        DocumentPackage delivered = casIn(com.securedoc.platform.domain.document.PackageStatus.COMPLETED);
+        DocumentId given = DocumentId.generate();
+        var result = service(realPdfCheck).execute(UploadDocumentCommand.forNextBatch(delivered.id(), "v2.pdf",
+                "application/pdf", content(onePagePdf()), CorrelationId.generate(), null, given), principal);
+        assertEquals(given, result.documentId());
+        assertEquals(1, delivered.documents().size());
+        assertEquals(given, delivered.documents().getFirst().id());
+    }
+
+    @Test
+    void aFileOfTheNextBatchIsNotStoredWhileTheCaseIsBusy() throws Exception {
+        for (var busy : new com.securedoc.platform.domain.document.PackageStatus[] {
+                com.securedoc.platform.domain.document.PackageStatus.PROCESSING,
+                com.securedoc.platform.domain.document.PackageStatus.CREATED}) {
+            DocumentPackage pkg = casIn(busy);
+            byte[] pdf = onePagePdf();
+            assertThrows(com.securedoc.platform.domain.error.CodedStateException.class, () -> service(realPdfCheck).execute(
+                    UploadDocumentCommand.forNextBatch(pkg.id(), "v2.pdf", "application/pdf", content(pdf),
+                            CorrelationId.generate(), null, DocumentId.generate()), principal), busy.name());
+        }
+        verify(storage, never()).storeForPackage(any(), any(), anyString(), any(), anyLong(), anyString());
+    }
+
+    @Test
+    void anOrdinaryUploadToADeliveredCaseIsStillRefused() throws Exception {
+        DocumentPackage delivered = casIn(com.securedoc.platform.domain.document.PackageStatus.COMPLETED);
+        byte[] pdf = onePagePdf();
+        assertThrows(com.securedoc.platform.domain.error.CodedStateException.class, () -> service(realPdfCheck).execute(
+                UploadDocumentCommand.of(delivered.id(), "v2.pdf", "application/pdf", content(pdf)), principal));
+    }
     private static byte[] pdfOf(int pages) throws Exception {
         try (PDDocument document = new PDDocument(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             for (int i = 0; i < pages; i++) document.addPage(new PDPage());

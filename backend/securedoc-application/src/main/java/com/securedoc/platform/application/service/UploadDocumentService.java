@@ -151,7 +151,16 @@ public final class UploadDocumentService implements UploadDocumentUseCase {
 
         // 5. Create Document entity (generates DocumentId) — includes tenantId
         DocumentType documentType = resolveDocumentType(mimeType);
-        Document document = Document.create(
+        // Task 0104: a file of a delivered case's next batch keeps the id its batch classification gave it, and the case
+        // must be between batches before anything is stored.
+        if (command.isForNextBatch() && !documentPackage.takesNextBatchNow()) {
+            throw new com.securedoc.platform.domain.error.CodedStateException(LvErrorCode.INT_026,
+                    "The case can't take a new batch in status: " + documentPackage.status());
+        }
+        Document document = command.isForNextBatch()
+                ? Document.createWithId(command.nextBatchDocumentId(), principal.tenantId(), command.packageId(), fileName,
+                        mimeType, command.contentLength(), checksum, documentType, command.sensitivityLevel())
+                : Document.create(
                 principal.tenantId(),
                 command.packageId(),
                 fileName,
@@ -198,7 +207,8 @@ public final class UploadDocumentService implements UploadDocumentUseCase {
         artifact.markAvailable(storageRef);
 
         // 9. Add document to package
-        documentPackage.addDocument(document);
+        if (command.isForNextBatch()) documentPackage.addBatchDocument(document);
+        else documentPackage.addDocument(document);
 
         // 10. Persist all
         packageRepository.save(documentPackage);
