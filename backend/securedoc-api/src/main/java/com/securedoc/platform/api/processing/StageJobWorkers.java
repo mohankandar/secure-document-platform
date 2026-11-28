@@ -187,6 +187,8 @@ public class StageJobWorkers {
         if (!workGate.mayTakeWork()) return;
         try {
             service.releaseExpiredClaims();
+            // Task 0116: during an AI server outage, whether the servers are back (at most once per probe interval).
+            service.probeAiServers();
         } catch (RuntimeException failure) {
             log.warn("STAGE_JOB_CLAIM_SWEEP_FAILED type={} code={}", failure.getClass().getSimpleName(),
                     LvErrorCodes.forPlatformFailure(failure).code());

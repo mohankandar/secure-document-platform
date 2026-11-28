@@ -683,3 +683,12 @@ export const PROCESSING_STAGE_WORDS: Record<string, string> = {
 export function processingStageWords(stage: string | null | undefined): string {
   return (stage && PROCESSING_STAGE_WORDS[stage.trim().toUpperCase()]) || 'processing';
 }
+
+/**
+ * Task 0116: the Cases banner while processing waits for the AI servers. They resume by themselves; IT has been told.
+ * The time as the screen shows times (hh:mm, the entity's zone applied by the caller).
+ */
+export function processingPauseBanner(since: string, casesWaiting: number): string {
+  const waiting = casesWaiting === 1 ? '1 case waiting' : `${casesWaiting} cases waiting`;
+  return `Processing paused since ${since}: AI server unreachable · ${waiting}. Cases go on by themselves when it is back.`;
+}

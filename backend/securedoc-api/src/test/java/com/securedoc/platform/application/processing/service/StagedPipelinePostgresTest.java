@@ -618,6 +618,56 @@ class StagedPipelinePostgresTest {
     }
 
     @Test
+    void anAiServerOutageMakesTheWorkWaitAndItGoesOnByItselfWhenTheServerIsBack() throws Exception {
+        // Task 0116 (owner: outages wait, they never stop a case). The AI server stops mid-run.
+        java.util.concurrent.atomic.AtomicBoolean down = new java.util.concurrent.atomic.AtomicBoolean(true);
+        service.withAiOutage(new AiServerOutage(down::get, java.time.Clock.systemUTC(), Duration.ofMillis(1)));
+        DocumentPackage pkg = submittedCase(2);
+        java.util.concurrent.atomic.AtomicInteger aiCalls = new java.util.concurrent.atomic.AtomicInteger();
+        onFind = document -> {
+            aiCalls.incrementAndGet();
+            if (down.get()) {
+                throw new com.securedoc.platform.application.exception.TechnicalDependencyException(
+                        com.securedoc.platform.application.exception.TechnicalDependency.AI,
+                        com.securedoc.platform.application.exception.TechnicalFailureCode.AI_UNAVAILABLE, true,
+                        "The AI server can't be reached");
+            }
+        };
+        service.plan(trigger(pkg));
+        runAll(PipelineStage.TEXT);
+        PipelineJob first = service.claimNext(PipelineStage.FIND, "server-a/FIND-worker-1").orElseThrow();
+        assertEquals(StagedProcessingService.Outcome.DONE, service.run(first));
+
+        PipelineJob waiting = jobsOf(pkg).stream().filter(j -> j.id().equals(first.id())).findFirst().orElseThrow();
+        assertEquals(PipelineJobStatus.WAITING_RETRY, waiting.status(), "it waits");
+        assertEquals(AiServerOutage.WAITING_FOR_AI_SERVER, waiting.lastDetail());
+        assertEquals(first.attempts(), waiting.attempts(), "no try is used");
+        assertTrue(documents.findByPackageIdAndTenantId(pkg.id(), pkg.tenantId()).stream()
+                .noneMatch(d -> d.status() == DocumentStatus.FAILED), "nothing failed");
+        assertEquals(PackageStatus.PROCESSING, status(pkg), "never Stopped");
+        verify(incidents, never()).recordFailure(any(), any(), any(), any(), any(), any(), any(), any());
+        assertTrue(service.aiWorkPausedSince().isPresent());
+        assertEquals(1, jobs.countCasesWaiting(pkg.tenantId(), AiServerOutage.WAITING_FOR_AI_SERVER));
+        Thread.sleep(20);
+        int before = aiCalls.get();
+        assertTrue(service.claimNext(PipelineStage.FIND, "server-a/FIND-worker-1").isEmpty(),
+                "no AI job is taken for any case while the servers are down");
+        assertEquals(before, aiCalls.get());
+
+        down.set(false);
+        service.probeAiServers();
+        assertTrue(service.aiWorkPausedSince().isEmpty(), "back");
+        runAll(PipelineStage.FIND);
+        runAll(PipelineStage.REDACT);
+        assertEquals(PackageStatus.PROCESSING, status(pkg), "Ready for export: it went on by itself");
+        verify(exports, org.mockito.Mockito.atLeastOnce()).queueCaseExport(eq(pkg.tenantId()), eq(pkg.id()), eq(1),
+                any());
+        assertTrue(documents.findByPackageIdAndTenantId(pkg.id(), pkg.tenantId()).stream()
+                .allMatch(d -> d.status() == DocumentStatus.PROCESSED));
+        service.withAiOutage(AiServerOutage.never());
+    }
+
+    @Test
     void aFailingStepFailsItsDocumentAndTheGateFailsTheCaseAsInline() {
         DocumentPackage pkg = submittedCase(2);
         List<DocumentId> failOnce = new ArrayList<>();
