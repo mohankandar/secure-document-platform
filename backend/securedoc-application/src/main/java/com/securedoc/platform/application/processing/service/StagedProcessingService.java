@@ -814,6 +814,11 @@ public final class StagedProcessingService {
     }
 
     private void decide(TenantId tenantId, PackageId packageId, CorrelationId correlationId) {
+        // Task 0119: the case's jobs are read first, before the case and its documents. A job and its document's result
+        // are saved together, so a job read as finished always has its document's new state in the reads after it (the
+        // case loads its documents, so it comes after too). Read the other way round, a document finishing in between
+        // was seen still waiting with its job finished, and a good case was stopped (LV-PRC-011).
+        List<PipelineJob> caseJobs = jobs.findByTenantIdAndPackageId(tenantId, packageId);
         DocumentPackage pkg = packageRepository.findByIdAndTenantId(packageId, tenantId).orElse(null);
         if (pkg == null || !OPEN.contains(pkg.status())) return;
         List<Document> documents = documentRepository.findByPackageIdAndTenantId(packageId, tenantId);
@@ -827,7 +832,7 @@ public final class StagedProcessingService {
         boolean needsReview = documents.stream().anyMatch(document ->
                 inline.hasDetectedFindings(document.id(), tenantId));
         if (!anyFailed && needsReview && pkg.status() == PackageStatus.PROCESSING
-                && checkEveryDocumentBeforeReview(tenantId, packageId, documents, correlationId)) {
+                && checkEveryDocumentBeforeReview(tenantId, packageId, documents, caseJobs, correlationId)) {
             return;
         }
         if (anyFailed || needsReview) {
@@ -839,7 +844,7 @@ public final class StagedProcessingService {
                 .filter(document -> document.status() == DocumentStatus.REDACTING).toList();
         if (!waitingForRedaction.isEmpty()) {
             int cycle = lifecycleService.nextExportCycle(packageId, tenantId);
-            List<PipelineJob> existing = jobs.findByTenantIdAndPackageId(tenantId, packageId);
+            List<PipelineJob> existing = caseJobs;
             List<Document> nothingPlanned = new ArrayList<>();
             for (Document document : waitingForRedaction) {
                 PipelineJob done = pkg.status() != PackageStatus.PROCESSING ? null : existing.stream()
@@ -874,9 +879,8 @@ public final class StagedProcessingService {
      * this review. True while a run is queued or still running: the case goes to Review when the last one ends.
      */
     private boolean checkEveryDocumentBeforeReview(TenantId tenantId, PackageId packageId, List<Document> documents,
-                                                   CorrelationId correlationId) {
+                                                   List<PipelineJob> existing, CorrelationId correlationId) {
         int cycle = lifecycleService.nextExportCycle(packageId, tenantId);
-        List<PipelineJob> existing = jobs.findByTenantIdAndPackageId(tenantId, packageId);
         boolean waiting = false;
         for (Document document : documents) {
             if (document.status() != DocumentStatus.REDACTING) continue;

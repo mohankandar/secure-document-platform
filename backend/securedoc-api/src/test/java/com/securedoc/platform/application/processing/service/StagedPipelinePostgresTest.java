@@ -477,6 +477,56 @@ class StagedPipelinePostgresTest {
     private final java.util.Set<com.securedoc.platform.domain.identity.DocumentId> keepsNothing =
             java.util.concurrent.ConcurrentHashMap.newKeySet();
 
+    /** Task 0119: found from CI (intermittent since 0112). */
+    @Test
+    void twoDocumentsOfACaseFinishingAtOnceNeverStopTheCase() throws Exception {
+        // The CI fault seen since 0112: the gate read a document still waiting, the other server then saved it (its job
+        // and its result together), the gate read its job as finished and stopped a good case (LV-PRC-011). Here the
+        // other server's step is saved exactly at the gate's read of the case's jobs.
+        DocumentPackage pkg = submittedCase(2);
+        service.plan(trigger(pkg));
+        runAll(PipelineStage.TEXT);
+        runAll(PipelineStage.FIND);
+        PipelineJob first = service.claimNext(PipelineStage.REDACT, "server-a/redact-1").orElseThrow();
+        PipelineJob second = service.claimNext(PipelineStage.REDACT, "server-b/redact-1").orElseThrow();
+        StagedProcessingService serverB = service;
+        JdbcPipelineJobRepository real = jobs;
+        JdbcPipelineJobRepository watched = org.mockito.Mockito.spy(real);
+        java.util.concurrent.atomic.AtomicBoolean armed = new java.util.concurrent.atomic.AtomicBoolean(true);
+        java.util.concurrent.ExecutorService other = java.util.concurrent.Executors.newSingleThreadExecutor();
+        List<java.util.concurrent.Future<StagedProcessingService.Outcome>> otherRun = new ArrayList<>();
+        org.mockito.Mockito.doAnswer(call -> {
+            boolean fromTheGate = java.util.Arrays.stream(Thread.currentThread().getStackTrace())
+                    .anyMatch(frame -> frame.getMethodName().equals("decide"));
+            if (fromTheGate && armed.compareAndSet(true, false)) {
+                otherRun.add(other.submit(() -> serverB.run(second)));
+                long until = System.currentTimeMillis() + 20_000;
+                while (jobsOf(pkg).stream().noneMatch(j -> j.id().equals(second.id())
+                        && j.status() == PipelineJobStatus.DONE) && System.currentTimeMillis() < until) {
+                    Thread.sleep(20);
+                }
+            }
+            return call.callRealMethod();
+        }).when(watched).findByTenantIdAndPackageId(any(), any());
+        StagedProcessingService serverA;
+        jobs = watched;
+        try {
+            serverA = serviceWith.apply(new StagedProcessingSettings(PipelineMode.STAGED, Duration.ofSeconds(30), 3, 1,
+                    1, 1, Duration.ofMillis(200)));
+        } finally {
+            jobs = real;
+        }
+        try {
+            assertEquals(StagedProcessingService.Outcome.DONE, serverA.run(first));
+            assertEquals(StagedProcessingService.Outcome.DONE, otherRun.get(0).get(30, java.util.concurrent.TimeUnit.SECONDS));
+        } finally {
+            other.shutdownNow();
+        }
+        assertFalse(armed.get(), "the other server's step was saved during the gate");
+        assertEquals(PackageStatus.PROCESSING, status(pkg), "never stopped: Ready for export");
+        verify(exports, org.mockito.Mockito.atLeastOnce()).queueCaseExport(eq(pkg.tenantId()), eq(pkg.id()), eq(1), any()); // the queue keeps one
+    }
+
     /**
      * Task 0112: the review's own path. The person checks the page the final check held; the review moves the case to
      * PROCESSING first (FocusedReviewService), then triggers it. The finished redaction runs again, with its final
