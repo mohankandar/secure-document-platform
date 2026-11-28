@@ -2,7 +2,7 @@
 
 Date: 2026-11-27
 Branch: `feature/0118-data-dictionary`, from `origin/feature/lexavault-r1b-tenant-identity` at `ab07b75`
-Outcome: see the end of this report
+Outcome: **PARTIALLY DONE**: all work committed (PR #56), not merged. `ci-passed` is red because the integration branch itself is red since the 0111/0112 merges (see "Blocker").
 
 ## What changed
 - **Meaning in the schema.** New changelog `090-schema-comments.xml` (included last in the master changelog): one comment for each of the 76 LexaVault tables and their 751 columns (`setTableRemarks` / `setColumnRemarks`), in one changeset with `runOnChange`, so a corrected meaning is edited in place and set again by the next schema step. The 39 platform-core tables (`idn_`, `lic_`, `notif_`, `erl_`, `fld_`, with their Flyway histories) and their 346 columns are in `backend/securedoc-api/src/main/resources/db/comments/platform-tables.sql`. Their table comments start with "(platform-core)". Liquibase's own two tables start with "(Liquibase)".
@@ -50,3 +50,14 @@ Tables no code uses any more, as their comments say: `enterprise_identity_connec
 To correct a meaning: edit it in `090-schema-comments.xml` (or `platform-tables.sql`), run the script and commit.
 
 No other product's name or behaviour in code.
+
+## Blocker: the integration branch is red (not caused by 0118)
+PR #56's backend job failed on `StagedPipelinePostgresTest.withExportModeInlineAStagedCaseStillEndsInOneExportJobAndNothingIsSentFromItsGate` ("Ready for export, as in job mode: expected PROCESSING but was FAILED", after its 60-second wait). Every other backend test passed, including `DataDictionaryPostgresTest`.
+
+The same class fails on `feature/lexavault-r1b-tenant-identity` itself, in its last two CI runs after the 0111 and 0112 merges:
+- run 46094653587: the same test, the same message;
+- run 46084786575: `switchedBackToInlineMidRunEveryStagedCaseStillFinishesAndNothingRunsTwice`.
+
+In the PR's log, a case is stopped with `PIPELINE_CASE_NOTHING_PLANNED` / LV-PRC-011 (the 0112 guard) while switching to inline mid-run. The likely reading is that the 0112 guard stops a case that is still valid when the pipeline mode changes mid-run. If so, it is a product defect, not only a test problem: a good case shown as Stopped. It touches the pipeline's cross-server behaviour and is outside 0118, so I did not change it, re-run it or work around it. No merge is possible until it is fixed: `ci-passed` is required.
+
+Once the fix is merged: rebase or merge the integration branch into `feature/0118-data-dictionary`, run `scripts/Update-LexaVault-DataDictionary.ps1` (only needed if the fix adds a migration), wait for green, then `gh pr merge 56 --merge --match-head-commit <green SHA>` and add the TO-TEST entry.
