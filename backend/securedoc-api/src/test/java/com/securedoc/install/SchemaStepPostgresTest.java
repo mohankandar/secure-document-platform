@@ -153,10 +153,32 @@ class SchemaStepPostgresTest {
         Map<String, String> found = new java.util.TreeMap<>();
         try (Connection c = on.connect(); Statement s = c.createStatement(); ResultSet rs = s.executeQuery(
                 "select table_name, string_agg(privilege_type, ',' order by privilege_type) from information_schema.role_table_grants "
-                        + "where grantee = '" + RUNTIME_USER + "' group by table_name")) {
+                        + "where grantee = '" + RUNTIME_USER + "' and table_name ~ '^(idn|lic|notif|erl|fld)_' group by table_name")) {
             while (rs.next()) found.put(rs.getString(1), rs.getString(2));
         }
         assertEquals(new java.util.TreeMap<>(expected), found);
+    }
+
+    /**
+     * Task 0114 (install proof): the app runs with an everyday account, so it has the rights it needs on LexaVault's own
+     * tables: the audit trail added to and read only, nothing on Liquibase's tables, no table of its own.
+     */
+    @Test
+    @Order(2)
+    void theRuntimeUserWorksOnLexaVaultsTablesAndNeverChangesTheAuditTrail() throws SQLException {
+        String text = run(0, "apply", "--runtime-user", RUNTIME_USER);
+        assertTrue(text.contains("LexaVault tables"), text);
+        try (Connection c = db.connectAs(RUNTIME_USER, RUNTIME_PASSWORD); Statement s = c.createStatement()) {
+            s.execute("select count(*) from document_packages");
+            s.execute("select count(*) from pipeline_jobs");
+            s.execute("update tenant_redaction_policies set updated_at = updated_at where false");
+            s.execute("delete from findings where false");
+            s.execute("select count(*) from audit_records");
+            assertThrows(SQLException.class, () -> s.execute("update audit_records set detail = detail"));
+            assertThrows(SQLException.class, () -> s.execute("delete from audit_records"));
+            assertThrows(SQLException.class, () -> s.execute("select count(*) from databasechangelog"));
+            assertThrows(SQLException.class, () -> s.execute("create table lv_not_allowed (id int)"));
+        }
     }
 
     /** Task 0054: the app's user does its licence work, and none of what 0.7.0 takes away from it (SEC-13, SEC-33). */
