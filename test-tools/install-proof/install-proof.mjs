@@ -16,7 +16,7 @@
  * new and named for this run. No password is printed or written to a file. Codes, counts and times only.
  */
 import { spawn, spawnSync } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
@@ -94,8 +94,14 @@ const SECRET_PATTERNS = [
   [/AKIA[0-9A-Z]{16}/, 'a cloud access key'],
   [/gh[pousr]_[A-Za-z0-9]{36}/, 'a GitHub token'],
   [/xox[abprs]-[A-Za-z0-9-]{10,}/, 'a chat token'],
-  [/(password|secret|token)\s*[:=]\s*["']?[A-Za-z0-9+/_\-]{12,}/i, 'a value after password, secret or token'],
+  [/(password|secret|token)\s*[:=]\s*["']?([A-Za-z0-9+/_\-]{12,})/i, 'a value after password, secret or token'],
 ];
+/**
+ * Values that are no secret, by their SHA-256 (never the value here): the local development database's default password
+ * in application-local.yml, the same as docker/compose/postgres.yml in the public repository. A production package should
+ * leave application-local.yml out (0114 report, for 0088).
+ */
+const NOT_SECRETS = new Set(['9727bcffc4909967fcf8f6d9a748151e3fd6c4b691afaef5e4693d8ad03a94bb']);
 const SECRET_FILES = /\.(pem|key|p12|pfx|jks|keystore)$|(^|[\\/])\.env(\.|$)/i;
 function filesUnder(dir, out = []) {
   for (const name of readdirSync(dir)) {
@@ -120,7 +126,14 @@ function scanForSecrets() {
     if (SECRET_FILES.test(f)) found.push(`${shown}: a key or settings file`);
     if (statSync(f).size > 5 * 1024 * 1024) continue;
     const text = readFileSync(f, 'latin1');
-    for (const [pattern, what] of SECRET_PATTERNS) if (pattern.test(text)) found.push(`${shown}: ${what}`);
+    for (const [pattern, what] of SECRET_PATTERNS) {
+      const flags = pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`;
+      for (const m of text.matchAll(new RegExp(pattern.source, flags))) {
+        if (m[1] && NOT_SECRETS.has(createHash('sha256').update(m[1]).digest('hex'))) continue;
+        found.push(`${shown}: ${what}`);
+        break;
+      }
+    }
   }
   if (found.length > 0) throw new Error(`secrets in the package: ${found.slice(0, 10).join('; ')}`);
   return `${files.length} files read`;
