@@ -1,7 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { apiClient } from '../../api/client';
-import type { BusinessAdminConfiguration, BusinessReviewMode, DocumentIntelligenceMode, ReportingConfiguration } from '../../types';
+import type { BusinessAdminConfiguration, CasePageSettings, BusinessReviewMode, DocumentIntelligenceMode, ReportingConfiguration } from '../../types';
 import { errorMessage } from '../data';
 import { Notice, Spinner } from '../atoms';
 import { useToast } from '../toast';
@@ -692,6 +692,48 @@ export default function PolicyArea({ entityName }: { entityName: string }) {
         <ErrorBoundary title="Report targets couldn't be shown" request="GET /business-admin/configuration"><ReportingCard data={data} mutate={apply} /></ErrorBoundary>
       </div>
       <ErrorBoundary title="Keeping exported copies couldn't be shown" request="GET /business-admin/export-retention"><ExportRetentionCard /></ErrorBoundary>
+      <ErrorBoundary title="Cases page settings couldn't be shown" request="GET /business-admin/case-page-settings"><CasePageCard /></ErrorBoundary>
     </div>
+  );
+}
+
+/**
+ * Task 0108 (addendum 2) and 0111 question 1: the Cases page for this entity: when a waiting case turns amber and red
+ * (Needs you), and after how many days a case that never received documents is closed as expired.
+ */
+function CasePageCard() {
+  const { data, error, mutate } = useSWR<CasePageSettings>('case-page-settings',
+    () => checked('GET /business-admin/case-page-settings', apiClient.getCasePageSettings(),
+      (v) => isRecord(v) && typeof v.waitAmberMinutes === 'number' && typeof v.waitRedMinutes === 'number' && typeof v.emptyCaseExpiryDays === 'number'),
+    { revalidateOnFocus: false });
+  const value = useMemo(() => (data ? { waitAmberMinutes: data.waitAmberMinutes, waitRedMinutes: data.waitRedMinutes, emptyCaseExpiryDays: data.emptyCaseExpiryDays } : null), [data]);
+  if (!data || !value) return <Loading error={error} retry={() => mutate()} label="Cases page" request="GET /business-admin/case-page-settings" />;
+  return (
+    <SettingsCard
+      title="Cases page"
+      description="When waiting cases change colour, and when an empty case is closed."
+      value={value}
+      savedMessage="Cases page settings saved."
+      invalid={(d) => !(d.waitRedMinutes > d.waitAmberMinutes)}
+      onSave={async (d) => {
+        if (!(Number.isInteger(d.waitAmberMinutes) && d.waitAmberMinutes >= 1 && d.waitRedMinutes <= 10080)) throw new Error('Each time must be from 1 minute to 7 days.');
+        if (!(d.waitRedMinutes > d.waitAmberMinutes)) throw new Error('Red must be later than amber.');
+        if (!(Number.isInteger(d.emptyCaseExpiryDays) && d.emptyCaseExpiryDays >= 1 && d.emptyCaseExpiryDays <= 365)) throw new Error('The days must be a whole number from 1 to 365.');
+        return mutate(await apiClient.saveCasePageSettings(d), { revalidate: false });
+      }}
+    >
+      {(d, set) => (
+        <div className="cf-ad-grid" data-testid="case-page-settings">
+          <DurationField label="Waiting time turns amber after" units={MINUTE_UNITS} min={1} max={10080} value={d.waitAmberMinutes}
+            hint="On Needs you, a case waiting this long shows its time in amber." onChange={(v) => set({ ...d, waitAmberMinutes: v })} />
+          <DurationField label="and red after" units={MINUTE_UNITS} min={2} max={10080} value={d.waitRedMinutes}
+            hint={d.waitRedMinutes > d.waitAmberMinutes ? 'Later than amber. Default: 4 hours and 8 hours.' : 'Red must be later than amber.'}
+            onChange={(v) => set({ ...d, waitRedMinutes: v })} />
+          <DurationField label="Close a case without documents after" units={[{ name: 'days', one: 'day', factor: 1 }]} fixedUnit="days" min={1} max={365}
+            value={d.emptyCaseExpiryDays} hint={`It is closed as expired and stays in Reports. Default: ${data.defaultEmptyCaseExpiryDays} days.`}
+            onChange={(v) => set({ ...d, emptyCaseExpiryDays: v })} />
+        </div>
+      )}
+    </SettingsCard>
   );
 }

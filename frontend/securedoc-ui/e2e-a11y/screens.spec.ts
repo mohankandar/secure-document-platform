@@ -54,8 +54,11 @@ test.describe('Cases (Supervisor)', () => {
 
   test('Approve confirm', async ({ page }) => {
     await signInAs(page, 'supervisor');
-    await page.locator('li.cf-case-row').filter({ hasText: 'LN-3002' }).getByRole('button', { name: 'Approve LN-3002' }).click();
-    await expect(page.getByRole('dialog', { name: 'Release redacted documents?' })).toBeVisible();
+    // Task 0108: the case card's Approve delivery asks inline.
+    await page.locator('li.cf-case-row').filter({ hasText: 'LN-3002' }).getByRole('link').click();
+    const panel = page.getByRole('complementary', { name: 'Case panel' });
+    await panel.getByRole('button', { name: 'Approve delivery' }).click();
+    await expect(panel.getByRole('button', { name: 'Confirm' })).toBeVisible();
     await scan(page, 'Approve confirm');
   });
 

@@ -244,6 +244,8 @@ export interface PackageSummary {
   stopReasonCode?: string | null;
   /** Task 0038: the delivery destination's name once one is chosen (GET /packages). */
   destinationName?: string | null;
+  /** Task 0108: when the newest document was uploaded (View > Columns > Uploaded); null before any. */
+  uploadedAt?: string | null;
 }
 
 export interface PackageDetail extends PackageSummary {
@@ -1264,3 +1266,12 @@ export interface NotificationBusinessOverview { mailOn: boolean; people: Notific
 export interface ApprovalAnswer { state: string; action: string | null; caseId: string | null; caseNumber: string | null; askedBy: string | null; expiresAt: string | null; code: string | null; message: string }
 
 export interface EntityChangeAnswer { done: boolean; code: string; message: string; whatToDo: string | null }
+
+/** Task 0108: the entity's Cases-page settings (Business Admin). */
+export interface CasePageSettings {
+  waitAmberMinutes: number;
+  waitRedMinutes: number;
+  emptyCaseExpiryDays: number;
+  /** The installation's default for an entity that has not set one. */
+  defaultEmptyCaseExpiryDays: number;
+}

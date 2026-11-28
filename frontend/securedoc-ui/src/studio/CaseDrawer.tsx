@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import useSWR from 'swr';
-import { ArrowRight, Check, FileText, X } from 'lucide-react';
+import { Check, FileText, X } from 'lucide-react';
 import { apiClient } from '../api/client';
 import type { FocusedReviewItem, PackageDetail, PackageLifecycleSummary, TechnicalExceptionDetail } from '../types';
 import {
@@ -22,7 +22,7 @@ import { CONFIRM_COPY, useCaseActionRunner } from './caseActionRunner';
 import { TechnicalDetails } from './failure';
 import CasePriority from './CasePriority';
 import CaseInstructions from './CaseInstructions';
-import { PRIORITY_FIELD, priorityName, CASE_SECTIONS, PROCESSING_STEP_LINE, SIGNATURE_REMOVED_LINE, STAGE_NAMES, caseSensitivityLine, destinationName, documentSensitivityNote, fieldNameInSentence, runsLeft } from './words';
+import { CASE_TAGS, PRIORITY_FIELD, priorityName, CASE_SECTIONS, PROCESSING_STEP_LINE, SIGNATURE_REMOVED_LINE, STAGE_NAMES, caseSensitivityLine, destinationName, documentSensitivityNote, fieldNameInSentence, runsLeft } from './words';
 import { deliveryLabel, processingStepOf } from './caseRules';
 import { lvCodeFor, lvLabel } from './lvCodes';
 import { technicalProblemText, technicalReasonCode } from './support/supportRules';
@@ -226,7 +226,7 @@ function NextStep({ pkg, life, technical, stage, status, reprocessing, caps, pac
   return (
     <section className="cf-next" data-tone={tone} aria-label="Next step">
       <div className="cf-next-text">
-        <span className="cf-eyebrow">{settled ? 'Done' : 'Next step'} · {info.label}</span>
+        <span className="cf-eyebrow">{settled ? 'Done' : 'Next step'} · {info.label}{stage === 'stopped' && status === 'FAILED' && <> · <span data-testid="with-it">{CASE_TAGS.withIt}</span></>}</span>
         <p className="cf-next-heading">{heading}</p>
         <p className="cf-next-body">{body}</p>
       </div>
@@ -247,8 +247,8 @@ function NextStep({ pkg, life, technical, stage, status, reprocessing, caps, pac
       ) : actions.length > 0 && (
         <div className="cf-next-action">
           {actions.map((a) => a.kind === 'review' ? (
-            <Link key={a.kind} to={`/review?case=${packageId}`} className="cf-btn" data-variant="mark">
-              {a.label} <ArrowRight size={16} aria-hidden="true" />
+            <Link key={a.kind} to={`/review?case=${packageId}`} className="cf-btn" data-variant="mark" data-wide="">
+              {a.label}
             </Link>
           ) : (
             <span key={a.kind} className="cf-next-choice">

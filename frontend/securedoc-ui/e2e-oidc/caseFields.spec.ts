@@ -156,6 +156,8 @@ test('a scan names the sensitive fields, so the Scan Bridge keeps them in memory
 test('Cases hides a sensitive value and finds it by the whole value, through the server', async ({ page }) => {
   const sent: Sent[] = [];
   await open(page, '/', ENTITY, sent);
+  // Task 0108: a case being redacted is under In progress, one line until opened.
+  await page.getByTestId('group-motion').click();
   await expect(page.getByText('204860').first()).toBeVisible();
   await expect(page.getByText('Synthetic')).toHaveCount(0);
   await page.locator('main input[placeholder]').first().fill('Synthetic Quill');

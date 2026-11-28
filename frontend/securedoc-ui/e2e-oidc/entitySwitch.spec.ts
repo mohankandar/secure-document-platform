@@ -96,7 +96,11 @@ async function mockApi(page: Page, entities: Array<typeof A>): Promise<Api> {
         // A late answer for the previous entity, marked so the test can prove it is never shown.
         return json([packageFor('A-LATE-9999', entity.tenantId)]);
       }
-      return json([packageFor(CASE[entity.tenantId], entity.tenantId)]);
+      // Task 0108: B's case waits for review (B's Processor sees it in Needs you); B also has an approval case, which a
+      // Processor cannot move forward, so it is under In progress (the role check; rows carry no buttons any more).
+      return json(entity.tenantId === B.tenantId
+        ? [packageFor(CASE[B.tenantId], B.tenantId, 'PENDING_REVIEW'), packageFor('B-APPROVAL-2003', B.tenantId)]
+        : [packageFor(CASE[entity.tenantId], entity.tenantId)]);
     }
     if (url.pathname.startsWith('/api/v1/review-items')) return json({ items: [], totalItems: 0 });
     if (url.pathname.startsWith('/api/v1/intake/identifier-definitions')) return json([]);
@@ -106,10 +110,10 @@ async function mockApi(page: Page, entities: Array<typeof A>): Promise<Api> {
   return api;
 }
 
-function packageFor(caseNumber: string, tenantId: string) {
+function packageFor(caseNumber: string, tenantId: string, status = 'PENDING_FINAL_APPROVAL') {
   return {
     packageId: `${tenantId.slice(0, 8)}-0000-4000-8000-${caseNumber.replace(/\D/g, '').padStart(12, '0')}`,
-    tenantId, packageType: 'MANUAL_UPLOAD', status: 'PENDING_FINAL_APPROVAL', documentCount: 1,
+    tenantId, packageType: 'MANUAL_UPLOAD', status, documentCount: 1,
     createdAt: '2026-11-17T12:00:00Z', updatedAt: '2026-11-17T12:00:00Z',
     businessIdentifiers: [{ key: 'contract_number', label: 'Contract Number', value: caseNumber, primary: true, searchable: true, displayable: true, displayOrder: 1 }],
   };
@@ -129,8 +133,9 @@ const accountMenu = (page: Page) => page.getByRole('menu', { name: 'Account' });
 const entityMenu = (page: Page) => page.getByRole('menu', { name: 'Entities' });
 const entityItems = (page: Page) => entityMenu(page).getByRole('menuitemradio');
 const workspaceNav = (page: Page) => page.getByRole('navigation', { name: 'Workspace' });
-// The row's Approve button: offered only with PACKAGE_APPROVE_DELIVERY (A's Supervisor role, not B's Processor role).
-const approveButtons = (page: Page) => page.getByRole('button', { name: /^Approve/ });
+// Task 0108: rows carry no buttons. The role check: an approval case is in Needs you only with PACKAGE_APPROVE_DELIVERY
+// (A's Supervisor role); B's Processor has B's approval case under In progress instead.
+const needsYou = (page: Page) => page.locator('section[data-group="you"]');
 
 async function switchTo(page: Page, entityName: string) {
   await switchControl(page).click();
@@ -166,7 +171,7 @@ test('two entities: switching from A to B shows only B data and B roles, and bac
   await signInAndChoose(page, 'Race Entity A');
 
   await expect(page.getByText('A-CASE-1001')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Approve A-CASE-1001' })).toBeVisible();
+  await expect(needsYou(page)).toContainText('A-CASE-1001');
   await expect(switchControl(page)).toHaveAccessibleName(/Race Entity A/);
 
   // The list is read fresh from the server and marks the current entity.
@@ -178,7 +183,8 @@ test('two entities: switching from A to B shows only B data and B roles, and bac
 
   await expect(page.getByText('B-CASE-2002')).toBeVisible();
   await expect(page.getByText('A-CASE-1001')).toHaveCount(0);
-  await expect(approveButtons(page)).toHaveCount(0);
+  await expect(needsYou(page)).not.toContainText('B-APPROVAL-2003');
+  await expect(page.locator('section[data-group="motion"] .cf-group-count')).toHaveText('1');
   await expect(switchControl(page)).toHaveAccessibleName(/Race Entity B/);
   await expect(page).toHaveURL(`http://localhost:${E2E_PORTS.oidcSignin}/`);
   expect(await page.evaluate(() => sessionStorage.getItem('lexavault.oidc.selected-tenant'))).toBe(B.tenantId);
@@ -188,7 +194,7 @@ test('two entities: switching from A to B shows only B data and B roles, and bac
   await expectNoStaleDataDuringSwitch(page, 'B-CASE-2002', 'A-CASE-1001');
   await expect(page.getByText('A-CASE-1001')).toBeVisible();
   await expect(page.getByText('B-CASE-2002')).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Approve A-CASE-1001' })).toBeVisible();
+  await expect(needsYou(page)).toContainText('A-CASE-1001');
 });
 
 test('a request still in flight during the switch is discarded, not shown', async ({ page }) => {

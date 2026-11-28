@@ -418,6 +418,8 @@ export async function mockApi(page: Page, who: Who, options: MockOptions = {}) {
     if (path === '/support/export-destinations/alert') return json(ex ? ex.alert : INLINE_EXPORT.alert);
     if (/^\/packages\/[^/]+\/export-jobs$/.test(path)) return json(ex ? ex.caseExport(path.split('/')[2]) : INLINE_EXPORT.caseExport);
     if (path === '/business-admin/export-retention') return json(retentionSettings());
+    // Task 0108: the entity's Cases-page settings (the defaults).
+    if (path === '/business-admin/case-page-settings') return json({ waitAmberMinutes: 240, waitRedMinutes: 480, emptyCaseExpiryDays: 7, defaultEmptyCaseExpiryDays: 7 });
     if (path === '/packages' && method === 'GET') return json(ex ? [...EXPORT_CASES, ...CASES] : CASES);
     const one = [...(ex ? EXPORT_CASES : []), ...CASES].find((c) => path === `/packages/${c.packageId}`);
     if (one) return json(one);

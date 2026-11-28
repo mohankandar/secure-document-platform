@@ -49,6 +49,30 @@ class EmptyCaseExpiryServiceTest {
     }
 
     @Test
+    void eachEntityHasItsOwnTimeAndAnEntityWhoseTimeCannotBeReadIsLeftAlone() {
+        TenantId shortEntity = TenantId.generate();
+        TenantId unreadable = TenantId.generate();
+        DocumentPackage nineDays = pkg(PackageType.MANUAL_UPLOAD, PackageStatus.CREATED, NOW.minus(Duration.ofDays(9)));
+        DocumentPackage threeDays = DocumentPackage.reconstitute(PackageId.generate(), shortEntity, PackageType.MANUAL_UPLOAD,
+                null, null, null, system, NOW.minus(Duration.ofDays(3)), PackageStatus.CREATED, PackageMetadata.empty(), List.of(),
+                NOW.minus(Duration.ofDays(3)));
+        DocumentPackage noTime = DocumentPackage.reconstitute(PackageId.generate(), unreadable, PackageType.MANUAL_UPLOAD,
+                null, null, null, system, NOW.minus(Duration.ofDays(30)), PackageStatus.CREATED, PackageMetadata.empty(), List.of(),
+                NOW.minus(Duration.ofDays(30)));
+        Fake packages = new Fake(List.of(nineDays, threeDays, noTime));
+        Map<TenantId, Duration> times = new HashMap<>();
+        times.put(tenant, Duration.ofDays(10));
+        times.put(shortEntity, Duration.ofDays(2));
+        EmptyCaseExpiryService service = new EmptyCaseExpiryService(packages, (id, t, a, at) -> { },
+                new AuditService(r -> { }), times::get, () -> Duration.ofDays(2));
+
+        assertEquals(1, service.expireDue(NOW, 100, system, CorrelationId.generate()));
+        assertEquals(PackageStatus.CANCELLED, threeDays.status(), "its entity says 2 days");
+        assertEquals(PackageStatus.CREATED, nineDays.status(), "its entity says 10 days");
+        assertEquals(PackageStatus.CREATED, noTime.status(), "no time known: nothing is closed");
+    }
+
+    @Test
     void refusesANonPositiveTime() {
         assertThrows(IllegalArgumentException.class, () -> new EmptyCaseExpiryService(new Fake(List.of()),
                 (id, t, a, at) -> { }, new AuditService(r -> { }), Duration.ZERO));

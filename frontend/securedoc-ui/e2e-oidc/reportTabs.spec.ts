@@ -191,5 +191,8 @@ test('Cases opens with one reason code from Reports, and shows all again', async
   await expect(rows).toHaveCount(1);
   await page.getByRole('button', { name: 'Show all cases' }).click();
   await expect(page.getByText(/^Only cases with/)).toHaveCount(0);
-  await expect(rows).toHaveCount(2);
+  // Task 0108: all cases again: the stopped one is IT's (Support), not listed; the exported one is under Exported today.
+  await page.getByTestId('group-delivered').click();
+  await expect(rows).toHaveCount(1);
+  await expect(rows.first()).toContainText(DELIVERED_CASE.businessIdentifiers.find((i) => i.primary)!.value);
 });
