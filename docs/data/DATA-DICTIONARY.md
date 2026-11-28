@@ -6,7 +6,7 @@ Meanings ending in "(to confirm)" are drafted from the code and wait for the own
 
 The links between the main tables are drawn in [RELATIONSHIPS.md](RELATIONSHIPS.md).
 
-115 tables, 1097 columns.
+115 tables, 1098 columns.
 
 ## LexaVault tables
 
