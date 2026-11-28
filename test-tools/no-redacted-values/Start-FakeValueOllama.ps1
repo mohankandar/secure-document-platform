@@ -89,7 +89,7 @@ public sealed class LexaVaultFakeValueOllama
                 string path = ReadRequestPath(stream, out body);
                 if (path == "/api/tags")
                 {
-                    Send(stream, 200, "{\"models\":[{\"name\":\"" + model + "\",\"model\":\"" + model + "\"}"
+                    Send(stream, 200, "{\"models\":[{\"name\":\"" + model + "\",\"model\":\"" + model + "\",\"digest\":\"sha256:56671c2ab9385f9cfcb404638e32cd62d88e3501d44822208363c010179a3c90\"}"
                         + (VisionModel == "" ? "" : ",{\"name\":\"" + VisionModel + "\",\"model\":\"" + VisionModel
                             + "\",\"digest\":\"" + VisionDigest + "\"}") + "]}");
                 }
