@@ -100,9 +100,20 @@ public final class OllamaVisionModelAdapter implements VisionModelPort {
             if (!local()) return notRead(page, LvErrorCode.AI_006, "SERVER_NOT_LOCAL");
             VisionPageResult refused = refuseUnlessApproved(page);
             if (refused != null) return refused;
-            VisionPageResult result = ask(image, page);
+            VisionPageResult result = ask(image, page, false);
+            if (!result.read() && "ANSWER_NOT_READABLE".equals(result.reason())) {
+                // Task 0119: on a page with nothing to find the model can answer in words ("There are none.") instead
+                // of JSON. Asked once more with the answer's JSON shape enforced; only an unreadable answer is asked
+                // again, so a readable answer is never changed (the shape alone was seen to find less).
+                result = ask(image, page, true);
+            }
             // The model must be the approved one when the answer is used, not only when it was asked.
             refused = result.read() ? refuseUnlessApproved(page) : null;
+            if (refused == null && !result.read()) {
+                // Codes only: no value and no answer text.
+                log.warn("VISION_PAGE_NOT_READ page={} code={} reasonCode={} prompt={}", page, result.code(),
+                        result.reason(), promptVersion);
+            }
             return refused == null ? result : refused;
         } catch (HttpTimeoutException e) {
             return notRead(page, LvErrorCode.AI_002, "TIMEOUT");
@@ -129,13 +140,21 @@ public final class OllamaVisionModelAdapter implements VisionModelPort {
         return VisionPageResult.notRead(page, code.code(), reason);
     }
 
-    private VisionPageResult ask(PageImage image, int page) throws IOException, InterruptedException {
+    /** Task 0119: the answer's shape, for the second asking of a page whose answer could not be read. */
+    static final Map<String, Object> ANSWER_SHAPE = Map.of("type", "object", "required", List.of("items"),
+            "properties", Map.of("items", Map.of("type", "array", "items", Map.of("type", "object",
+                    "required", List.of("type", "box"), "properties", Map.of(
+                            "type", Map.of("type", "string"),
+                            "box", Map.of("type", "array", "items", Map.of("type", "number")))))));
+
+    private VisionPageResult ask(PageImage image, int page, boolean shaped) throws IOException, InterruptedException {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("model", model);
         body.put("stream", false);
         body.put("keep_alive", keepAlive);
         body.put("messages", List.of(Map.of("role", "user", "content", prompt,
                 "images", List.of(Base64.getEncoder().encodeToString(image.png())))));
+        if (shaped) body.put("format", ANSWER_SHAPE);
         body.put("options", Map.of("temperature", 0, "num_ctx", CONTEXT_TOKENS, "num_predict", ANSWER_TOKENS));
         HttpRequest request = HttpRequest.newBuilder(chat).timeout(timeout).header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofByteArray(json.writeValueAsBytes(body))).build();

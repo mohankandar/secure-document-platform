@@ -232,11 +232,32 @@ export const FINAL_CHECK_WORDS = {
   foundBy: 'Final check',
   label: (page: number) => `Still readable in the finished file on page ${page}`,
   why: 'The finished file was searched again before delivery and something that must be redacted can still be read on this page. It is not delivered until a person decides. Mark what is still to be redacted. What was already redacted stays redacted.',
+  /* Task 0119 (owner test): the final check could not read the page; nothing was found on it. */
+  unreadLabel: (page: number) => `The final check could not read page ${page}`,
+  unreadWhy: 'The final check could not read this page (handwriting or a poor scan). Please confirm it is clean. Mark anything that is still to be redacted. What was already redacted stays redacted.',
+  reason: 'Reason code',
+  rereadToggle: 'Final check: read picture pages again',
+  rereadHint: 'Before a file is delivered, scanned, photographed and handwritten pages that no person looked at in the case are read again (text reading and the vision model) to find anything still readable. Pages a person finished are never read again. The quick search of every page’s text always runs. Turning this off saves time on scanned files but checks picture pages less.',
 } as const;
 
 /** Task 0099: whether a page was sent by the final check rather than the second check. */
 export function isFinalCheck(kinds: readonly string[] | null | undefined): boolean {
   return Array.isArray(kinds) && kinds[0] === 'FINAL';
+}
+
+/**
+ * Task 0119: why the final check held a page: FOUND (a value is still readable) or UNREAD (it could not read the page
+ * and found nothing); null for any other item.
+ */
+export function finalCheckReason(kinds: readonly string[] | null | undefined): 'FOUND' | 'UNREAD' | null {
+  if (!isFinalCheck(kinds) || !Array.isArray(kinds)) return null;
+  const named = kinds.some((k) => Boolean(SECOND_CHECK_KINDS[k]));
+  return !named && kinds.includes('UNREAD') ? 'UNREAD' : 'FOUND';
+}
+
+/** Task 0119: the explanation of a page the final check held, by its reason. */
+export function finalCheckWhy(kinds: readonly string[] | null | undefined): string {
+  return finalCheckReason(kinds) === 'UNREAD' ? FINAL_CHECK_WORDS.unreadWhy : FINAL_CHECK_WORDS.why;
 }
 
 /** Task 0065. */
@@ -260,7 +281,10 @@ export const CASE_INSTRUCTIONS = {
 export function secondCheckBanner(kinds: readonly string[] | null | undefined, page: number): string | null {
   if (!Array.isArray(kinds)) return null;
   const names = kinds.map((k) => SECOND_CHECK_KINDS[k]).filter((name): name is string => Boolean(name));
-  if (isFinalCheck(kinds)) return names.length === 0 ? FINAL_CHECK_WORDS.label(page) : `${FINAL_CHECK_WORDS.label(page)}: ${names.join(', ')}`;
+  if (isFinalCheck(kinds)) {
+    if (finalCheckReason(kinds) === 'UNREAD') return FINAL_CHECK_WORDS.unreadLabel(page);
+    return names.length === 0 ? FINAL_CHECK_WORDS.label(page) : `${FINAL_CHECK_WORDS.label(page)}: ${names.join(', ')}`;
+  }
   if (names.length === 0) return kinds.includes('UNREAD') ? SECOND_CHECK_WORDS.unread(page) : SECOND_CHECK_WORDS.label(page);
   return `${SECOND_CHECK_WORDS.label(page)}: ${names.join(', ')}`;
 }

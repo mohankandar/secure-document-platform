@@ -707,7 +707,12 @@ public final class StagedProcessingService {
     /** REDACT: the document is redacted with its safety check and the final check (task 0044), as inline. */
     private String redact(PipelineJob job, Document document, CorrelationId correlationId) {
         if (document.status() != DocumentStatus.REDACTING) return "ALREADY_" + document.status();
-        if (inline.hasDetectedFindings(document.id(), job.tenantId())) return "WAITING_FOR_REVIEW";
+        if (inline.hasDetectedFindings(document.id(), job.tenantId())) {
+            // Task 0119: one review stop per case: the final check's findings join the review now.
+            redactDocument.checkBeforeReview(RedactDocumentCommand.of(document.id(), job.packageId(), job.tenantId(),
+                    correlationId));
+            return "WAITING_FOR_REVIEW";
+        }
         try {
             redactDocument.execute(RedactDocumentCommand.of(document.id(), job.packageId(), job.tenantId(),
                     correlationId));
@@ -809,6 +814,11 @@ public final class StagedProcessingService {
     }
 
     private void decide(TenantId tenantId, PackageId packageId, CorrelationId correlationId) {
+        // Task 0119: the case's jobs are read first, before the case and its documents. A job and its document's result
+        // are saved together, so a job read as finished always has its document's new state in the reads after it (the
+        // case loads its documents, so it comes after too). Read the other way round, a document finishing in between
+        // was seen still waiting with its job finished, and a good case was stopped (LV-PRC-011).
+        List<PipelineJob> caseJobs = jobs.findByTenantIdAndPackageId(tenantId, packageId);
         DocumentPackage pkg = packageRepository.findByIdAndTenantId(packageId, tenantId).orElse(null);
         if (pkg == null || !OPEN.contains(pkg.status())) return;
         List<Document> documents = documentRepository.findByPackageIdAndTenantId(packageId, tenantId);
@@ -821,6 +831,10 @@ public final class StagedProcessingService {
         boolean anyFailed = documents.stream().anyMatch(document -> document.status() == DocumentStatus.FAILED);
         boolean needsReview = documents.stream().anyMatch(document ->
                 inline.hasDetectedFindings(document.id(), tenantId));
+        if (!anyFailed && needsReview && pkg.status() == PackageStatus.PROCESSING
+                && checkEveryDocumentBeforeReview(tenantId, packageId, documents, caseJobs, correlationId)) {
+            return;
+        }
         if (anyFailed || needsReview) {
             // Inline's own gate: a failed document fails the case; a finding for a person sends it to Review.
             inline.completeStagedPackageIfReady(packageId, tenantId, correlationId);
@@ -830,7 +844,7 @@ public final class StagedProcessingService {
                 .filter(document -> document.status() == DocumentStatus.REDACTING).toList();
         if (!waitingForRedaction.isEmpty()) {
             int cycle = lifecycleService.nextExportCycle(packageId, tenantId);
-            List<PipelineJob> existing = jobs.findByTenantIdAndPackageId(tenantId, packageId);
+            List<PipelineJob> existing = caseJobs;
             List<Document> nothingPlanned = new ArrayList<>();
             for (Document document : waitingForRedaction) {
                 PipelineJob done = pkg.status() != PackageStatus.PROCESSING ? null : existing.stream()
@@ -852,6 +866,36 @@ public final class StagedProcessingService {
         // Every document is redacted: Ready for export (final approval if the entity asks for it), as inline. The case
         // always ends in an export job, whatever export-mode says now: nothing is sent in this transaction (task 0052).
         inline.completeStagedPackageIfReady(packageId, tenantId, correlationId);
+    }
+
+    /** Task 0119: a REDACT job that is still to run (or running). */
+    private static final Set<PipelineJobStatus> OPEN_JOB = EnumSet.of(PipelineJobStatus.READY, PipelineJobStatus.RUNNING,
+            PipelineJobStatus.WAITING_RETRY, PipelineJobStatus.PAUSED);
+
+    /**
+     * Task 0119 (owner: one review stop per case). Before the case goes to Review, every document waiting for
+     * redaction has its REDACT run in this cycle: one with nothing for a person is redacted and checked (its final
+     * check may hold pages), one with findings for a person has the checks run on a trial file, so all its items are in
+     * this review. True while a run is queued or still running: the case goes to Review when the last one ends.
+     */
+    private boolean checkEveryDocumentBeforeReview(TenantId tenantId, PackageId packageId, List<Document> documents,
+                                                   List<PipelineJob> existing, CorrelationId correlationId) {
+        int cycle = lifecycleService.nextExportCycle(packageId, tenantId);
+        boolean waiting = false;
+        for (Document document : documents) {
+            if (document.status() != DocumentStatus.REDACTING) continue;
+            PipelineJob run = existing.stream()
+                    .filter(job -> job.stage() == PipelineStage.REDACT && document.id().equals(job.documentId())
+                            && job.exportCycle() == cycle)
+                    .findFirst().orElse(null);
+            if (run == null) {
+                queue(PipelineStage.REDACT, tenantId, packageId, document.id(), cycle, correlationId, false);
+                waiting = true;
+            } else if (OPEN_JOB.contains(run.status())) {
+                waiting = true;
+            }
+        }
+        return waiting;
     }
 
     /**

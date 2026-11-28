@@ -454,7 +454,7 @@ public final class ComplianceReportService {
                 .with(p.packs().stream().map(Enum::name).collect(Collectors.toSet()),
                         p.keepLastFour().stream().map(Enum::name).collect(Collectors.toSet()))
                 .withVision(p.vision()).withSecondCheck(p.secondCheck())
-                .withDocumentContext(p.documentContext());
+                .withDocumentContext(p.documentContext()).withFinalCheckReread(p.finalCheckReread());
     }
 
     private LifecyclePolicy lifecyclePolicyAt(TenantId tenantId, Instant at) {
